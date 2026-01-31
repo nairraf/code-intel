@@ -3,6 +3,7 @@ import sys
 import contextlib
 import logging
 from pathlib import Path
+import json
 from dotenv import load_dotenv
 
 # --- PREVENT STDOUT LEAKAGE ---
@@ -44,7 +45,7 @@ CENTRAL_MEMORY_VAULT.mkdir(parents=True, exist_ok=True)
 def find_project_identity():
     current_path = Path(os.getcwd()).resolve()
     project_root = current_path
-    markers = [".git", "pubspec.yaml", ".env", "pyproject.toml"]
+    markers = [".git", "pubspec.yaml", ".env", "pyproject.toml", "package.json"]
     for parent in [current_path] + list(current_path.parents):
         if any((parent / marker).exists() for marker in markers):
             project_root = parent
@@ -57,6 +58,16 @@ def find_project_identity():
                     if line.startswith("name:"):
                         return line.split(":")[1].strip(), project_root
         except: pass
+    
+    package_json = project_root / "package.json"
+    if package_json.exists():
+        try:
+            with open(package_json, "r") as f:
+                data = json.load(f)
+                if "name" in data:
+                    return data["name"], project_root
+        except: pass
+
     return project_root.name.strip(), project_root
 
 project_id, project_root = find_project_identity()
@@ -130,6 +141,11 @@ async def check_ollama():
             return response.status_code == 200
     except: return False
 
+def load_cognee_context():
+    """Returns the pre-initialized Cognee context."""
+    project_vault_path = CENTRAL_MEMORY_VAULT / project_id
+    return project_id, project_vault_path, project_root
+
 @mcp.tool()
 async def sync_project_memory():
     """Analyzes the current codebase and syncs it to the memory vault."""
@@ -172,13 +188,29 @@ async def search_memory(query: str, search_type: str = "GRAPH_COMPLETION"):
 
 @mcp.tool()
 async def check_memory_status():
-    """Status of the memory vault."""
+    """Returns the current project status, storage size, and active configuration."""
     with contextlib.redirect_stdout(sys.stderr):
+        active_id, vault, root = load_cognee_context()
+        
+        # Calculate vault metrics
+        total_size = 0
+        file_count = 0
+        if vault.exists():
+            for f in vault.rglob("*"):
+                if f.is_file():
+                    total_size += f.stat().st_size
+                    file_count += 1
+        
         online = await check_ollama()
         return {
-            "project": project_id,
-            "vault": str(vault_path),
-            "ollama": "Online" if online else "Offline"
+            "project_identity": active_id,
+            "vault_path": str(vault),
+            "vault_size_mb": round(total_size / (1024 * 1024), 2),
+            "internal_file_count": file_count,
+            "ollama_status": "Online" if online else "Offline",
+            "active_model": os.environ.get("LLM_MODEL"),
+            "embedding_model": os.environ.get("EMBEDDING_MODEL"),
+            "chunk_size": os.environ.get("CHUNK_SIZE", "2048")
         }
 
 @mcp.tool()
