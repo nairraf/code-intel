@@ -42,14 +42,17 @@ for logger_name in ["asyncio", "anyio", "httpcore", "httpx", "urllib3"]:
 CENTRAL_MEMORY_VAULT = Path("D:/Development/ALL_COGNEE_MEMORIES")
 CENTRAL_MEMORY_VAULT.mkdir(parents=True, exist_ok=True)
 
-def find_project_identity():
-    current_path = Path(os.getcwd()).resolve()
+def find_project_identity(search_path: str = None):
+    """Finds project root by looking for markers, starting from search_path or cwd."""
+    current_path = Path(search_path or os.getcwd()).resolve()
     project_root = current_path
     markers = [".git", "pubspec.yaml", ".env", "pyproject.toml", "package.json"]
     for parent in [current_path] + list(current_path.parents):
         if any((parent / marker).exists() for marker in markers):
             project_root = parent
             break
+    
+    # Try to extract project name
     pubspec = project_root / "pubspec.yaml"
     if pubspec.exists():
         try:
@@ -133,9 +136,9 @@ async def check_ollama():
             return response.status_code == 200
     except: return False
 
-def load_cognee_context():
+def load_cognee_context(search_path: str = None):
     """Dynamically resolves project identity and refreshes environment at call-time."""
-    p_id, p_root = find_project_identity()
+    p_id, p_root = find_project_identity(search_path)
     p_vault = CENTRAL_MEMORY_VAULT / p_id
     
     # Refresh core environment variables to point to the correct project
@@ -156,15 +159,16 @@ def load_cognee_context():
     return p_id, p_vault, p_root
 
 @mcp.tool()
-async def sync_project_memory():
-    """Analyzes the current codebase and syncs it to the memory vault."""
+async def sync_project_memory(project_path: str = None):
+    """Analyzes the current codebase and syncs it to the memory vault.
+    Provide project_path if the project is in a different directory than the server."""
     # We use a nested function to ensure return values are captured AFTER redirection ends
     async def run_sync():
         with contextlib.redirect_stdout(sys.stderr):
             if not await check_ollama():
                 return "❌ Sync failed: Ollama is not running."
             
-            p_id, _, p_root = load_cognee_context()
+            p_id, _, p_root = load_cognee_context(project_path)
             
             files_to_add = []
             for root, dirs, files in os.walk(p_root):
@@ -187,11 +191,12 @@ async def sync_project_memory():
         return f"❌ Sync error: {str(e)}"
 
 @mcp.tool()
-async def search_memory(query: str, search_type: str = "GRAPH_COMPLETION"):
-    """Searches project memory (GRAPH_COMPLETION or CODE)."""
+async def search_memory(query: str, search_type: str = "GRAPH_COMPLETION", project_path: str = None):
+    """Searches project memory (GRAPH_COMPLETION or CODE).
+    Provide project_path if the project is in a different directory than the server."""
     async def run_search():
         with contextlib.redirect_stdout(sys.stderr):
-            load_cognee_context()
+            load_cognee_context(project_path)
             if not await check_ollama(): return "❌ Search failed: Ollama offline."
             s_type = getattr(SearchType, search_type.upper(), SearchType.GRAPH_COMPLETION)
             results = await cognee.search(query_text=query, query_type=s_type)
@@ -199,10 +204,11 @@ async def search_memory(query: str, search_type: str = "GRAPH_COMPLETION"):
     return await run_search()
 
 @mcp.tool()
-async def check_memory_status():
-    """Returns the current project status, storage size, and active configuration."""
+async def check_memory_status(project_path: str = None):
+    """Returns the current project status, storage size, and active configuration.
+    Provide project_path if the project is in a different directory than the server."""
     with contextlib.redirect_stdout(sys.stderr):
-        active_id, vault, root = load_cognee_context()
+        active_id, vault, root = load_cognee_context(project_path)
         
         # Calculate vault metrics
         total_size = 0
@@ -226,11 +232,12 @@ async def check_memory_status():
         }
 
 @mcp.tool()
-async def prune_memory():
-    """Clears all local memory and forces database unlock by removing stale lock files."""
+async def prune_memory(project_path: str = None):
+    """Clears all local memory and forces database unlock by removing stale lock files.
+    Provide project_path if the project is in a different directory than the server."""
     async def run_prune():
         with contextlib.redirect_stdout(sys.stderr):
-            p_id, p_vault, _ = load_cognee_context()
+            p_id, p_vault, _ = load_cognee_context(project_path)
             
             # Argressively clear lock files first
             lock_paths = [

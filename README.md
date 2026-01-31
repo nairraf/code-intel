@@ -41,10 +41,20 @@ The following settings are pre-configured for the best balance of speed and VRAM
 
 ## 🚀 Available Tools
 
-- `sync_project_memory`: Ingests the current codebase into the vault.
-- `search_memory`: Query the knowledge graph (GRAPH_COMPLETION or CODE).
-- `check_memory_status`: Live project stats and health.
-- `prune_memory`: Deep clean for the current project vault.
+All tools now support an optional `project_path` parameter to ensure correct vault isolation when using multiple projects.
+
+- `sync_project_memory(project_path: str = None)`: Ingests the codebase into the vault.
+- `search_memory(query: str, search_type: str, project_path: str = None)`: Query the knowledge graph.
+- `check_memory_status(project_path: str = None)`: Live project stats and health.
+- `prune_memory(project_path: str = None)`: Deep clean for the project vault.
+
+### Multi-Project Usage (For Agents)
+If you are working in a different directory than the MCP server, always pass your current directory as `project_path`:
+```js
+// Example MCP call
+cognee_memory.sync_project_memory({ project_path: "/absolute/path/to/your/project" });
+```
+This ensures Cognee detects the correct project name and creates an isolated vault in `D:/Development/ALL_COGNEE_MEMORIES`.
 
 ---
 

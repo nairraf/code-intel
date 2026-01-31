@@ -76,6 +76,15 @@ async def test_identity_node():
         assert p_id == "mcp-web-tool"
         assert p_root.resolve() == target_dir.resolve()
 
+async def test_identity_explicit_path():
+    print("Testing Project Identity (Explicit Path)...")
+    target_dir = (TEST_ROOT / "flutter_project").resolve()
+    # We do NOT patch os.getcwd here, we pass the path directly
+    p_id, p_root = mcp_cognee.find_project_identity(str(target_dir))
+    print(f"  Result: ID='{p_id}', Root='{p_root}'")
+    assert p_id == "super_app"
+    assert p_root.resolve() == target_dir.resolve()
+
 async def test_ollama_check():
     print("Testing Ollama Connection (Real)...")
     # This might fail if Ollama isn't running, but we want to know
@@ -88,6 +97,7 @@ async def main():
         await test_identity_git()
         await test_identity_flutter()
         await test_identity_node()
+        await test_identity_explicit_path()
         await test_ollama_check()
         print("\n✅ All Logic Tests Passed!")
         with open("test_result.txt", "w") as f:
