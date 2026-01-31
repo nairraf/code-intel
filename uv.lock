@@ -16,8 +16,10 @@ dependencies = [
     { name = "cognee" },
     { name = "fastembed" },
     { name = "fastmcp" },
+    { name = "httpx" },
     { name = "mistralai" },
     { name = "pydocket" },
+    { name = "python-dotenv" },
     { name = "transformers" },
 ]
 
@@ -26,8 +28,10 @@ requires-dist = [
     { name = "cognee", specifier = ">=0.5.1" },
     { name = "fastembed", specifier = ">=0.6.0" },
     { name = "fastmcp", specifier = ">=2.14.4" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "mistralai", specifier = ">=1.9.11" },
     { name = "pydocket", specifier = ">=0.16.6" },
+    { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "transformers", specifier = ">=4.57.6" },
 ]
 

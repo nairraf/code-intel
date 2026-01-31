@@ -1,69 +1,54 @@
 import os
-import asyncio
+import sys
+import contextlib
+import logging
 from pathlib import Path
 from dotenv import load_dotenv
-import cognee
-from fastmcp import FastMCP
-from cognee.modules.search.types import SearchType
-import httpx
 
-# --- CONFIGURATION ---
+# --- PREVENT STDOUT LEAKAGE ---
+# This filter is the last line of defense for the MCP protocol.
+class ProtocolFilter:
+    def __init__(self, original_stdout, backup_stderr):
+        self.stdout = original_stdout
+        self.stderr = backup_stderr
+
+    def write(self, data):
+        if not data:
+            return
+        stripped = data.strip()
+        # Only allow JSON messages or empty/newline noise if it looks like JSON structure
+        if (stripped.startswith("{") and stripped.endswith("}")) or \
+           (stripped.startswith('{"jsonrpc"') or stripped.startswith('{"id"')):
+            self.stdout.write(data)
+        else:
+            self.stderr.write(data)
+
+    def flush(self):
+        self.stdout.flush()
+
+    def __getattr__(self, name):
+        return getattr(self.stdout, name)
+
+# Apply the filter globally as early as possible
+_original_stdout = sys.stdout
+sys.stdout = ProtocolFilter(_original_stdout, sys.stderr)
+
+# Silence noisy loggers
+for logger_name in ["asyncio", "anyio", "httpcore", "httpx", "urllib3"]:
+    logging.getLogger(logger_name).setLevel(logging.ERROR)
+
+# --- EARLY CONFIGURATION ---
 CENTRAL_MEMORY_VAULT = Path("D:/Development/ALL_COGNEE_MEMORIES")
 CENTRAL_MEMORY_VAULT.mkdir(parents=True, exist_ok=True)
 
-# 1. Initialize the MCP Server
-mcp = FastMCP("CogneeMemory")
-
-async def check_ollama():
-    """Verify Ollama is awake and the model is loaded."""
-    # print("📡 Checking Ollama connection...")
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get("http://localhost:11434/api/tags", timeout=5.0)
-            if response.status_code == 200:
-                # print("✅ Ollama is online.")
-                return True
-    except Exception:
-        # print("❌ ERROR: Ollama is not running on localhost:11434")
-        return False
-    return False
-
-def configure_environment():
-    """Sets up the necessary environment variables for Cognee."""
-    # 1. Clear out Azure/OpenAI to ensure NO leak
-    for key in ["AZURE_OPENAI_API_KEY", "OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"]:
-        os.environ.pop(key, None)
-
-    # 2. Hard-code the local providers for your 7800XT
-    os.environ["LLM_PROVIDER"] = "ollama"
-    os.environ["LLM_MODEL"] = "qwen2.5-coder:7b"
-    os.environ["LLM_ENDPOINT"] = "http://localhost:11434/v1"
-
-    # Embedding Config
-    os.environ["EMBEDDING_PROVIDER"] = "fastembed"
-    os.environ["EMBEDDING_MODEL"] = "BAAI/bge-small-en-v1.5"
-    os.environ["EMBEDDING_DIMENSIONS"] = "384"
-
-    # Tokenizer is mandatory for local Ollama/FastEmbed setups
-    os.environ["HUGGINGFACE_TOKENIZER"] = "BAAI/bge-small-en-v1.5"
-
 def find_project_identity():
-    """
-    Climbs up from CWD to find the project root and identity.
-    Returns: (project_id, project_root_path)
-    """
     current_path = Path(os.getcwd()).resolve()
-
-    # Climb up to find a root marker (.git, pubspec.yaml, .env, pyproject.toml)
     project_root = current_path
     markers = [".git", "pubspec.yaml", ".env", "pyproject.toml"]
-    
     for parent in [current_path] + list(current_path.parents):
         if any((parent / marker).exists() for marker in markers):
             project_root = parent
             break
-
-    # Try to get the name from pubspec.yaml (Flutter specific) for maximum accuracy
     pubspec = project_root / "pubspec.yaml"
     if pubspec.exists():
         try:
@@ -71,102 +56,143 @@ def find_project_identity():
                 for line in f:
                     if line.startswith("name:"):
                         return line.split(":")[1].strip(), project_root
-        except:
-            pass
-
-    # Fallback to the name of the root directory
-    # Sanitize the name to be safe for directory names
+        except: pass
     return project_root.name.strip(), project_root
 
-def load_cognee_context():
-    """Wires up Cognee to the correct project vault and loads env vars."""
-    configure_environment()
-    
-    project_id, project_root = find_project_identity()
+project_id, project_root = find_project_identity()
 
-    # Load .env from project root if it exists
-    root_env = project_root / ".env"
-    if root_env.exists():
-        load_dotenv(root_env, override=True)
+# Load env
+root_env = project_root / ".env"
+if root_env.exists():
+    load_dotenv(root_env, override=True)
 
-    # Route the database to the central vault
-    project_vault_path = CENTRAL_MEMORY_VAULT / project_id
-    project_vault_path.mkdir(parents=True, exist_ok=True)
+# Forced GPU/Ollama defaults
+os.environ["LLM_PROVIDER"] = "ollama"
+os.environ["LLM_MODEL"] = "qwen2.5-coder:7b"
+os.environ["LLM_ENDPOINT"] = "http://localhost:11434/v1"
+os.environ["EMBEDDING_PROVIDER"] = "ollama"
+os.environ["EMBEDDING_MODEL"] = "qwen3-embedding:0.6b"
+os.environ["EMBEDDING_ENDPOINT"] = "http://localhost:11434/api/embeddings"
+os.environ["EMBEDDING_DIMENSIONS"] = "1024"
+if not os.environ.get("HUGGINGFACE_TOKENIZER"):
+    os.environ["HUGGINGFACE_TOKENIZER"] = "Qwen/Qwen2.5-Coder-7B"
 
-    os.environ["COGNEE_SYSTEM_PATH"] = str(project_vault_path)
-    # Important: Cognee might need re-initialization if paths change, 
-    # but setting env var before operation usually works for the *next* import/call usage
-    # if cognee internals lazy-load config. 
+# Paths
+vault_path = CENTRAL_MEMORY_VAULT / project_id
+os.environ["SYSTEM_ROOT_DIRECTORY"] = str(vault_path / ".cognee_system")
+os.environ["DATA_ROOT_DIRECTORY"] = str(vault_path / ".data_storage")
+os.environ["COGNEE_LOGS_DIR"] = str(vault_path / "logs")
+os.environ["COGNEE_SYSTEM_PATH"] = str(vault_path)
 
-    return project_id, project_vault_path, project_root
+# --- IMPORTS ---
+import asyncio
+import cognee
+from fastmcp import FastMCP
+from cognee.modules.search.types import SearchType
+import httpx
+
+# --- MONKEYPATCH ---
+from cognee.infrastructure.databases.vector.embeddings.OllamaEmbeddingEngine import OllamaEmbeddingEngine
+async def robust_get_embedding(self, prompt: str):
+    import aiohttp
+    payload = {
+        "model": self.model, "prompt": prompt, "input": prompt,
+        "options": {"num_ctx": 8192}
+    }
+    headers = {}
+    api_key = os.getenv("LLM_API_KEY")
+    if api_key: headers["Authorization"] = f"Bearer {api_key}"
+    async with aiohttp.ClientSession() as session:
+        async with session.post(self.endpoint, json=payload, headers=headers, timeout=60.0) as response:
+            if response.status != 200:
+                err_text = await response.text()
+                raise Exception(f"Ollama error {response.status}: {err_text}")
+            data = await response.json()
+            if "data" in data and len(data["data"]) > 0: return data["data"][0]["embedding"]
+            if "embeddings" in data: return data["embeddings"][0]
+            if "embedding" in data: return data["embedding"]
+            raise KeyError(f"Unexpected response format: {data}")
+
+OllamaEmbeddingEngine._get_embedding = robust_get_embedding
+sys.stderr.write("🛠️ Cognee Ollama Compatibility Patch Applied.\n")
+
+# Filters
+WHITELIST_EXTENSIONS = {".py", ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".js", ".ts", ".tsx", ".jsx", ".css", ".html", ".sh", ".sql"}
+SKIP_DIRECTORIES = {".git", ".venv", "venv", "__pycache__", "node_modules", "build", "dist", "bge-m3"}
+SKIP_FILES = {"uv.lock", "package-lock.json", "poetry.lock"}
+
+mcp = FastMCP("CogneeMemory")
+
+async def check_ollama():
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("http://localhost:11434/api/tags", timeout=5.0)
+            return response.status_code == 200
+    except: return False
 
 @mcp.tool()
 async def sync_project_memory():
-    """
-    Analyzes the current codebase, extracts a knowledge graph, and updates vectors.
-    Run this after changing architecture, adding files, or modifying logic.
-    """
-    if not await check_ollama():
-        return "❌ Sync failed: Ollama is not running on localhost:11434."
-
-    project_id, vault, project_root = load_cognee_context()
-
+    """Analyzes the current codebase and syncs it to the memory vault."""
+    # We use a nested function to ensure return values are captured AFTER redirection ends
+    async def run_sync():
+        with contextlib.redirect_stdout(sys.stderr):
+            if not await check_ollama():
+                return "❌ Sync failed: Ollama is not running."
+            
+            files_to_add = []
+            for root, dirs, files in os.walk(project_root):
+                dirs[:] = [d for d in dirs if d not in SKIP_DIRECTORIES and not d.startswith(".")]
+                for file in files:
+                    if file in SKIP_FILES or file.startswith("."): continue
+                    file_path = Path(root) / file
+                    if file_path.suffix.lower() in WHITELIST_EXTENSIONS:
+                        files_to_add.append(str(file_path))
+            
+            if not files_to_add: return "⚠️ No valid files found."
+            
+            await cognee.add(files_to_add, dataset_name=project_id)
+            await cognee.cognify(chunks_per_batch = 1)
+            return f"✅ Memory synced for '{project_id}' ({len(files_to_add)} files)."
+    
     try:
-        # Step 1: Ingest the current root directory
-        # Cognee intelligently skips ignored files/folders internally (respects .gitignore)
-        # Use the project_id as the dataset name to keep things isolated
-        await cognee.add(str(project_root), dataset_name=project_id)
-
-        # Step 2: Cognify (Process graph and vectors)
-        await cognee.cognify()
-
-        return f"✅ Memory synced for '{project_id}'. Data stored in vault."
+        return await run_sync()
     except Exception as e:
-        return f"❌ Sync failed for {project_id}: {str(e)}"
+        return f"❌ Sync error: {str(e)}"
 
 @mcp.tool()
 async def search_memory(query: str, search_type: str = "GRAPH_COMPLETION"):
-    """
-    Searches project memory. 
-    Use 'GRAPH_COMPLETION' for high-level logic/architecture questions.
-    Use 'CODE' for finding specific snippets or implementations.
-    """
-    if not await check_ollama():
-        return "❌ Search failed: Ollama is not running on localhost:11434."
-
-    load_cognee_context()
-    try:
-        # Convert string to Cognee SearchType Enum
-        s_type = getattr(SearchType, search_type.upper(), SearchType.GRAPH_COMPLETION)
-
-        results = await cognee.search(query_text=query, query_type=s_type)
-
-        if not results:
-            return "No relevant information found in memory."
-   
-        return results
-    except Exception as e:
-        return f"❌ Search failed: {str(e)}"
+    """Searches project memory (GRAPH_COMPLETION or CODE)."""
+    async def run_search():
+        with contextlib.redirect_stdout(sys.stderr):
+            if not await check_ollama(): return "❌ Search failed: Ollama offline."
+            s_type = getattr(SearchType, search_type.upper(), SearchType.GRAPH_COMPLETION)
+            results = await cognee.search(query_text=query, query_type=s_type)
+            return results if results else "No results found."
+    return await run_search()
 
 @mcp.tool()
 async def check_memory_status():
-    """Returns the current project being indexed and its storage location."""
-    project_id, vault, _ = load_cognee_context()
-    ollama_status = "Online" if await check_ollama() else "Offline"
-    return {
-        "active_project": project_id,
-        "vault_location": str(vault),
-        "ollama_status": ollama_status,
-        "environment": "Production-Ready Cognee"
-    }
+    """Status of the memory vault."""
+    with contextlib.redirect_stdout(sys.stderr):
+        online = await check_ollama()
+        return {
+            "project": project_id,
+            "vault": str(vault_path),
+            "ollama": "Online" if online else "Offline"
+        }
+
+@mcp.tool()
+async def prune_memory():
+    """Clears all local memory for the project."""
+    async def run_prune():
+        with contextlib.redirect_stdout(sys.stderr):
+            await cognee.prune.prune_system(metadata=True)
+            await cognee.prune.prune_data()
+            return f"🧹 Memory pruned for '{project_id}'."
+    return await run_prune()
 
 if __name__ == "__main__":
-    # Windows-specific fix for the "Proactor" event loop
     if os.name == "nt":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    
-    # Run a quick self-check on startup
-    print("🚀 Cognee MCP Server Starting...")
     asyncio.run(check_ollama())
-    
     mcp.run()
