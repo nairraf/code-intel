@@ -70,30 +70,21 @@ def find_project_identity():
 
     return project_root.name.strip(), project_root
 
-project_id, project_root = find_project_identity()
+def clear_stale_locks(p_vault):
+    """Surgically removes Kuzu lock files to prevent 'Database is locked' errors."""
+    lock_paths = [
+        p_vault / ".cognee_system" / "databases" / "cognee_graph_kuzu" / ".lock",
+        p_vault / ".cognee_system" / "databases" / "cognee_graph_kuzu" / "lock"
+    ]
+    for lp in lock_paths:
+        if lp.exists():
+            try:
+                lp.unlink()
+                sys.stderr.write(f"🔓 Startup: Cleared stale lock {lp.name}\n")
+            except: pass
 
-# Load env
-root_env = project_root / ".env"
-if root_env.exists():
-    load_dotenv(root_env, override=True)
-
-# Forced GPU/Ollama defaults
-os.environ["LLM_PROVIDER"] = "ollama"
-os.environ["LLM_MODEL"] = "qwen2.5-coder:7b"
-os.environ["LLM_ENDPOINT"] = "http://localhost:11434/v1"
-os.environ["EMBEDDING_PROVIDER"] = "ollama"
-os.environ["EMBEDDING_MODEL"] = "qwen3-embedding:0.6b"
-os.environ["EMBEDDING_ENDPOINT"] = "http://localhost:11434/api/embeddings"
-os.environ["EMBEDDING_DIMENSIONS"] = "1024"
-if not os.environ.get("HUGGINGFACE_TOKENIZER"):
-    os.environ["HUGGINGFACE_TOKENIZER"] = "Qwen/Qwen2.5-Coder-7B"
-
-# Paths
-vault_path = CENTRAL_MEMORY_VAULT / project_id
-os.environ["SYSTEM_ROOT_DIRECTORY"] = str(vault_path / ".cognee_system")
-os.environ["DATA_ROOT_DIRECTORY"] = str(vault_path / ".data_storage")
-os.environ["COGNEE_LOGS_DIR"] = str(vault_path / "logs")
-os.environ["COGNEE_SYSTEM_PATH"] = str(vault_path)
+# Removed module-level identity globals to support dynamic project switching.
+# Identity is now resolved at call-time in load_cognee_context().
 
 # --- IMPORTS ---
 import asyncio
@@ -143,9 +134,26 @@ async def check_ollama():
     except: return False
 
 def load_cognee_context():
-    """Returns the pre-initialized Cognee context."""
-    project_vault_path = CENTRAL_MEMORY_VAULT / project_id
-    return project_id, project_vault_path, project_root
+    """Dynamically resolves project identity and refreshes environment at call-time."""
+    p_id, p_root = find_project_identity()
+    p_vault = CENTRAL_MEMORY_VAULT / p_id
+    
+    # Refresh core environment variables to point to the correct project
+    os.environ["SYSTEM_ROOT_DIRECTORY"] = str(p_vault / ".cognee_system")
+    os.environ["DATA_ROOT_DIRECTORY"] = str(p_vault / ".data_storage")
+    os.environ["COGNEE_LOGS_DIR"] = str(p_vault / "logs")
+    os.environ["COGNEE_SYSTEM_PATH"] = str(p_vault)
+    
+    # Ensure defaults are set
+    os.environ["LLM_PROVIDER"] = "ollama"
+    os.environ["LLM_MODEL"] = "qwen2.5-coder:7b"
+    os.environ["LLM_ENDPOINT"] = "http://localhost:11434/v1"
+    os.environ["EMBEDDING_PROVIDER"] = "ollama"
+    os.environ["EMBEDDING_MODEL"] = "qwen3-embedding:0.6b"
+    os.environ["EMBEDDING_ENDPOINT"] = "http://localhost:11434/api/embeddings"
+    os.environ["EMBEDDING_DIMENSIONS"] = "1024"
+
+    return p_id, p_vault, p_root
 
 @mcp.tool()
 async def sync_project_memory():
@@ -156,8 +164,10 @@ async def sync_project_memory():
             if not await check_ollama():
                 return "❌ Sync failed: Ollama is not running."
             
+            p_id, _, p_root = load_cognee_context()
+            
             files_to_add = []
-            for root, dirs, files in os.walk(project_root):
+            for root, dirs, files in os.walk(p_root):
                 dirs[:] = [d for d in dirs if d not in SKIP_DIRECTORIES and not d.startswith(".")]
                 for file in files:
                     if file in SKIP_FILES or file.startswith("."): continue
@@ -167,9 +177,9 @@ async def sync_project_memory():
             
             if not files_to_add: return "⚠️ No valid files found."
             
-            await cognee.add(files_to_add, dataset_name=project_id)
+            await cognee.add(files_to_add, dataset_name=p_id)
             await cognee.cognify(chunks_per_batch = 1)
-            return f"✅ Memory synced for '{project_id}' ({len(files_to_add)} files)."
+            return f"✅ Memory synced for '{p_id}' ({len(files_to_add)} files)."
     
     try:
         return await run_sync()
@@ -181,6 +191,7 @@ async def search_memory(query: str, search_type: str = "GRAPH_COMPLETION"):
     """Searches project memory (GRAPH_COMPLETION or CODE)."""
     async def run_search():
         with contextlib.redirect_stdout(sys.stderr):
+            load_cognee_context()
             if not await check_ollama(): return "❌ Search failed: Ollama offline."
             s_type = getattr(SearchType, search_type.upper(), SearchType.GRAPH_COMPLETION)
             results = await cognee.search(query_text=query, query_type=s_type)
@@ -216,16 +227,42 @@ async def check_memory_status():
 
 @mcp.tool()
 async def prune_memory():
-    """Clears all local memory for the project."""
+    """Clears all local memory and forces database unlock by removing stale lock files."""
     async def run_prune():
         with contextlib.redirect_stdout(sys.stderr):
-            await cognee.prune.prune_system(metadata=True)
-            await cognee.prune.prune_data()
-            return f"🧹 Memory pruned for '{project_id}'."
+            p_id, p_vault, _ = load_cognee_context()
+            
+            # Argressively clear lock files first
+            lock_paths = [
+                p_vault / ".cognee_system" / "databases" / "cognee_graph_kuzu" / ".lock",
+                p_vault / ".cognee_system" / "databases" / "cognee_graph_kuzu" / "lock"
+            ]
+            for lp in lock_paths:
+                if lp.exists():
+                    try:
+                        lp.unlink()
+                        sys.stderr.write(f"🔓 Removed stale lock: {lp}\n")
+                    except: pass
+
+            try:
+                await cognee.prune.prune_system(metadata=True)
+                await cognee.prune.prune_data()
+                return f"🧹 Memory pruned and locks cleared for '{p_id}'."
+            except Exception as e:
+                return f"❌ Prune failed: {str(e)}"
     return await run_prune()
 
 if __name__ == "__main__":
     if os.name == "nt":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(check_ollama())
+    
+    # Self-heal locks for the current project context on startup
+    _, p_vault, _ = load_cognee_context()
+    clear_stale_locks(p_vault)
+
+    # Run check silenty
+    with contextlib.redirect_stdout(sys.stderr):
+        asyncio.run(check_ollama())
+
+    # FastMCP .run() handles the main protocol loop
     mcp.run()
