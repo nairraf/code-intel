@@ -1,6 +1,0 @@
-Traceback (most recent call last):
-  File "D:\Development\agentic_env\test_sync.py", line 4, in <module>
-    from mcp_cognee import sync_project_memory, check_ollama
-  File "D:\Development\agentic_env\mcp_cognee.py", line 3, in <module>
-    from dotenv import load_dotenv
-ModuleNotFoundError: No module named 'dotenv'

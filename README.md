@@ -1,19 +1,55 @@
-# Overview
+# Cognee Memory MCP Server (v1.1.0) 🧠🚀
 
-Local cognee MCP tool to give cloud based AI's access to project based memory.
+A production-grade Model Context Protocol (MCP) server that brings persistent, high-performance knowledge graphs to your AI agent. Powered by **Cognee** and optimized for **Local GPU (Ollama)**.
 
-# local environment
-- DEV IDE: antigravity
-- GPU: AMD Radeon RX 7800XT with 16GB VRAM
-- ollama
+## 🌟 Key Features
 
-# Current Status
+### 1. High-Performance Embedding Pipeline
+- **Qwen3-Embedding (0.6b)**: Optimized for 32k context, enabling massive **2048-token chunks** for higher precision.
+- **GPU Accelerated**: Fully multi-threaded and sequential processing to prevent local LLM bottlenecking.
 
-there was a small POC performed with init_memory.py, this was a small test on a specific repository. This worked but needs to be expanded to a MCP tool which antigravity (or any local MCP aware system can call). The current attempt is with mcp_cognee.py.
+### 2. Multi-Project Support
+The server automatically detects your project identity and isolates data:
+- **Flutter/Dart**: Uses `pubspec.yaml` name.
+- **Node.js/Web**: Uses `package.json` name.
+- **General**: Falls back to directory name or `.git` identity.
+- **Vault Location**: All memories are stored in a centralized, project-isolated directory: `D:\Development\ALL_COGNEE_MEMORIES`.
 
-# TODO
+### 3. Protocol Shield 🛡️
+Advanced filtering logic separates library background noise from the MCP protocol. This prevents the "invalid character" errors common in complex Python library integrations.
 
-- [ ] local memory system should be project aware. 
-- [ ] there should be a central way to store all local cognee databases
-- [ ] confirm the best local models to use, POC was with qwen2.5-coder:7b and bge-small-en-v1.5. cognee did not work with bge-m3 in the POC
- 
+### 4. Live Vault Metrics
+Track your local knowledge growth with the `check_memory_status` tool:
+- Live disk usage in MB.
+- Internal database/graph file count.
+- Health check for local Ollama.
+
+---
+
+## 🛠️ Performance Configuration
+
+The following settings are pre-configured for the best balance of speed and VRAM usage on a 6GB+ GPU:
+
+| Setting | Value | Why? |
+| :--- | :--- | :--- |
+| **LLM_MODEL** | `qwen2.5-coder:7b` | High-quality reasoning. |
+| **EMBEDDING_MODEL** | `qwen3-embedding:0.6b` | 1024-dim accuracy. |
+| **CHUNK_SIZE** | `2048` | Larger context for better RAG. |
+| **WINDOW_CONTEXT** | `8192` | Forced via monkeypatch for embeddings. |
+
+---
+
+## 🚀 Available Tools
+
+- `sync_project_memory`: Ingests the current codebase into the vault.
+- `search_memory`: Query the knowledge graph (GRAPH_COMPLETION or CODE).
+- `check_memory_status`: Live project stats and health.
+- `prune_memory`: Deep clean for the current project vault.
+
+---
+
+## 🧪 Verification
+Run unit tests to verify project identity logic:
+```bash
+.venv\Scripts\python tests/test_mcp_logic.py
+```
