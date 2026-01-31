@@ -43,7 +43,7 @@ The following settings are pre-configured for the best balance of speed and VRAM
 
 All tools now support an optional `project_path` parameter to ensure correct vault isolation when using multiple projects.
 
-- `sync_project_memory(project_path: str = None)`: Ingests the codebase into the vault.
+- `sync_project_memory(project_path: str = None)`: Ingests the codebase into the vault. (v1.2.1: Forces internal path switch)
 - `search_memory(query: str, search_type: str, project_path: str = None)`: Query the knowledge graph.
 - `check_memory_status(project_path: str = None)`: Live project stats and health.
 - `prune_memory(project_path: str = None)`: Deep clean for the project vault.

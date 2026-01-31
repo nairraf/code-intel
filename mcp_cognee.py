@@ -137,17 +137,25 @@ async def check_ollama():
     except: return False
 
 def load_cognee_context(search_path: str = None):
-    """Dynamically resolves project identity and refreshes environment at call-time."""
+    """Dynamically resolves project identity and refreshes internal Cognee state."""
     p_id, p_root = find_project_identity(search_path)
     p_vault = CENTRAL_MEMORY_VAULT / p_id
     
-    # Refresh core environment variables to point to the correct project
+    # 1. Update environment variables (for generic Lookups)
     os.environ["SYSTEM_ROOT_DIRECTORY"] = str(p_vault / ".cognee_system")
     os.environ["DATA_ROOT_DIRECTORY"] = str(p_vault / ".data_storage")
     os.environ["COGNEE_LOGS_DIR"] = str(p_vault / "logs")
     os.environ["COGNEE_SYSTEM_PATH"] = str(p_vault)
     
-    # Ensure defaults are set
+    # 2. THE NUDGE: Explicitly update Cognee's internal shared configuration.
+    # This forces LanceDB and Kuzu to recalculate their persistent paths mid-session.
+    try:
+        cognee.config.system_root_directory(str(p_vault / ".cognee_system"))
+        cognee.config.data_root_directory(str(p_vault / ".data_storage"))
+    except Exception as e:
+        sys.stderr.write(f"⚠️ Config nudge failed: {str(e)}\n")
+    
+    # 3. Ensure defaults are set
     os.environ["LLM_PROVIDER"] = "ollama"
     os.environ["LLM_MODEL"] = "qwen2.5-coder:7b"
     os.environ["LLM_ENDPOINT"] = "http://localhost:11434/v1"
