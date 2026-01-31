@@ -122,6 +122,7 @@ async def robust_get_embedding(self, prompt: str):
             if "data" in data and len(data["data"]) > 0: return data["data"][0]["embedding"]
             if "embeddings" in data: return data["embeddings"][0]
             if "embedding" in data: return data["embedding"]
+            
             raise KeyError(f"Unexpected response format: {data}")
 
 OllamaEmbeddingEngine._get_embedding = robust_get_embedding
