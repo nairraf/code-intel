@@ -113,6 +113,45 @@ load_dotenv(override=False)
 # Ensure tokenizer is set for Pydantic model
 os.environ["HUGGINGFACE_TOKENIZER"] = os.environ.get("HUGGINGFACE_TOKENIZER", "Qwen/Qwen2.5-Coder-7B")
 
+# --- SCHEMA GUARDRAILS (MONKEYPATCHING) ---
+def patch_data_models():
+    """
+    Robustness Patch: Adds aliases and defaults to Cognee's Pydantic models.
+    This prevents 'ValidationError' when LLMs hallucinate field names (e.g. src_node_id)
+    or omit non-critical fields (e.g. description).
+    """
+    from pydantic import AliasChoices
+    import cognee.shared.data_models as data_models
+    
+    try:
+        # Patch Node
+        if hasattr(data_models, "Node"):
+            Node = data_models.Node
+            Node.model_fields["id"].validation_alias = AliasChoices("id", "node_id", "identifier")
+            Node.model_fields["name"].validation_alias = AliasChoices("name", "label", "title")
+            Node.model_fields["name"].default = "Unknown"
+            Node.model_fields["type"].validation_alias = AliasChoices("type", "category", "kind", "class")
+            Node.model_fields["type"].default = "Entity"
+            Node.model_fields["description"].validation_alias = AliasChoices("description", "desc", "summary")
+            Node.model_fields["description"].default = ""
+            Node.model_rebuild(force=True)
+            
+        # Patch Edge
+        if hasattr(data_models, "Edge"):
+            Edge = data_models.Edge
+            Edge.model_fields["source_node_id"].validation_alias = AliasChoices("source_node_id", "src_node_id", "from_id", "source")
+            Edge.model_fields["target_node_id"].validation_alias = AliasChoices("target_node_id", "dst_node_id", "to_id", "target")
+            Edge.model_fields["relationship_name"].validation_alias = AliasChoices("relationship_name", "rel_name", "relation", "type")
+            Edge.model_fields["relationship_name"].default = "related_to"
+            Edge.model_rebuild(force=True)
+            
+        sys.stderr.write("[PATCH] Cognee Schema Guardrails Applied.\n")
+    except Exception as e:
+        sys.stderr.write(f"⚠️ Failed to apply schema guardrails: {e}\n")
+
+# Run patch before high-level imports that might use models
+patch_data_models()
+
 # --- IMPORTS ---
 import cognee
 from fastmcp import FastMCP
