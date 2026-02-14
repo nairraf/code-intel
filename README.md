@@ -1,60 +1,74 @@
-# Cognee Memory MCP Server (v1.2.5) 🧠🚀
+# Cognee Memory MCP Server (v2.0.0) 🧠🚀
 
 A production-grade Model Context Protocol (MCP) server that brings persistent, high-performance knowledge graphs to your AI agent. Powered by **Cognee** and optimized for **Local GPU (Ollama)**.
 
 ## 🌟 Key Features
 
 ### 1. Protocol Shield 🛡️
-Advanced filtering logic separates library background noise from the MCP protocol. This prevents the "invalid character" errors common in complex Python library integrations.
-- **Redirection**: All startup output and dependency prints are diverted to `stderr`.
-- **Silencing**: Noisy loggers (httpx, instructor, etc.) are set to `ERROR` level by default.
-- **Aggressive Stripping**: Dynamically removes rogue log handlers attached to `stdout` at runtime.
+Advanced filtering logic separates library background noise from the MCP protocol.
+- **Fortress**: FD-level stdout redirect ensures zero protocol corruption.
+- **Silencing**: Noisy loggers set to `ERROR` by default.
+- **Handler Stripping**: Dynamically removes rogue `stdout` handlers at runtime.
 
-### 2. Multi-Project Support & Vault Isolation
-The server automatically detects your project identity and creates a local repository for memories:
-- **Vault Location**: `.cognee_vault/` is created at your project's root.
-- **Isolated Logs**: Project-specific logs are stored in the central `logs/` directory (e.g., `agentic_env.log`, `selos.log`).
-- **Dynamic Context**: Automatically switches databases and paths based on the `project_path` parameter or current environment.
+### 2. Multi-Project Vault Isolation
+Each project gets its own local `.cognee_vault/` directory:
+- **Local Vaults**: Created at each project's root (add `.cognee_vault/` to `.gitignore`).
+- **Isolated Logs**: Project-specific logs in a central `logs/` directory.
+- **Dynamic Context**: Automatically switches databases based on the `project_path` parameter.
+- **Concurrency Safety**: Per-project `asyncio.Lock` prevents operation collisions.
 
 ### 3. GPU Accelerated Pipeline
-- **Qwen3-Embedding (0.6b)**: Optimized for 32k context, enabling massive **2048-token chunks**.
-- **Sequential Extraction**: Forces `chunks_per_batch=1` to ensure SQLite stability on concurrent local systems.
+- **Qwen3-Embedding (0.6b)**: 32k context, 2048-token chunks.
+- **Dimension Validation**: Embeddings are validated against expected dimensions with retries.
+- **Sequential Extraction**: `chunks_per_batch=1` for SQLite stability.
 
 ---
 
 ## 🚀 Available Tools
 
-All tools support an optional `project_path` parameter to ensure correct vault isolation.
+All tools support an optional `project_path` parameter for vault isolation.
 
-- `sync_project_memory(project_path: str = None)`: Ingests the codebase into the local `.cognee_vault`.
-- `search_memory(query: str, search_type: str, project_path: str = None)`: Query the knowledge graph.
-- `check_memory_status(project_path: str = None)`: Live project stats and disk usage.
-- `prune_memory(project_path: str = None)`: Deep clean for the project vault and database unlock.
+| Tool | Description |
+|:---|:---|
+| `sync_project_memory` | Ingests codebase into `.cognee_vault`. Does nuclear reset + fresh sync. |
+| `search_memory` | Queries the knowledge graph (`GRAPH_COMPLETION` or `CODE`). |
+| `check_memory_status` | Returns project stats, disk usage, and Ollama status. |
+| `prune_memory` | Nuclear reset — removes all vault internals and database locks. |
+
+### Sync Strategy
+
+Every `sync_project_memory` call does a **full nuclear reset** before syncing:
+1. Removes `.cognee_system/` and `.data_storage/` via `shutil.rmtree`
+2. Re-initializes Cognee configuration for fresh paths
+3. Ingests source files and builds knowledge graph
+
+This ensures zero lock contention and clean database state.
+
+### Supported File Types
+
+`.py`, `.md`, `.txt`, `.json`, `.yaml`, `.yml`, `.toml`, `.js`, `.ts`, `.tsx`, `.jsx`, `.css`, `.html`, `.sh`, `.sql`, `.dart`
 
 ---
 
 ## 🛠️ Configuration
 
-The MCP server respects your environment but provides dynamic defaults for pathing.
-
 | Setting | Value | Description |
-| :--- | :--- | :--- |
+|:---|:---|:---|
 | **LLM_MODEL** | `qwen2.5-coder:7b` | Default reasoning model. |
 | **EMBEDDING_MODEL** | `qwen3-embedding:0.6b` | High-precision local embeddings. |
+| **EMBEDDING_DIMENSIONS** | `1024` | Expected vector size (validated). |
 | **SYSTEM_ROOT** | `.cognee_vault/.cognee_system` | Isolated metadata storage. |
 | **DATA_ROOT** | `.cognee_vault/.data_storage` | Raw ingested data storage. |
 
 ---
 
-## 🧪 Verification & Testing
-
-Verify system stability and protocol shielding using the comprehensive test suite:
+## 🧪 Testing
 
 ```bash
-uv run pytest tests/
+uv run pytest tests/ -v
 ```
 
-To view code coverage:
+With coverage:
 ```bash
 uv run pytest --cov=mcp_cognee tests/
 ```
