@@ -1,22 +1,25 @@
-# Setting up Cognee MCP Server
+# Setting up Code Intelligence MCP
 
-To give an Antigravity agent access to your project's local memory, add the `mcp_cognee.py` script as an MCP Server.
+To give your Antigravity agent semantic search capabilities across your projects, add the `code-intel` server.
 
 ## 1. Configuration
 
-Add the following to your MCP Client configuration (**Settings** > **MCP Servers** or `mcp_server_config.json`):
+Add the following to your Antigravity MCP configuration:
 
 ```json
 {
   "mcpServers": {
-    "cognee-memory": {
+    "code-intel": {
       "command": "uv",
       "args": [
         "run",
+        "--quiet",
+        "--no-progress",
         "--directory",
         "d:/Development/agentic_env",
         "python",
-        "mcp_cognee.py"
+        "-m",
+        "src.server"
       ],
       "env": {
         "PYTHONUNBUFFERED": "1"
@@ -26,29 +29,19 @@ Add the following to your MCP Client configuration (**Settings** > **MCP Servers
 }
 ```
 
-> [!NOTE]
-> Ensure `uv` is in your system PATH. If not, use the full path to the `uv` executable.
+## 2. Usage Policy
 
-## 2. Restart/Reload
-After saving the configuration, **restart Antigravity** or reload the MCP servers.
+The server is **Project Isolated**. Each time you use the tools, the agent handles the indexing context for you.
 
-## 3. Available Tools
+### Typical Workflow
 
-| Tool | Description |
-|:---|:---|
-| `sync_project_memory(project_path)` | Ingests codebase and builds knowledge graph. |
-| `search_memory(query, search_type, project_path)` | Queries the knowledge graph. |
-| `check_memory_status(project_path)` | Returns project stats and Ollama status. |
-| `prune_memory(project_path)` | Nuclear reset of vault internals. |
+1.  **Indexing**: Run `refresh_index(root_path=".")` to build the semantic map for your current project.
+2.  **Searching**: Use `search_code(query="how is auth implemented?")` to retrieve relevant code blocks from that specific project.
 
-## 4. Multi-Project Usage
+## 3. Storage & Logs
 
-Each project gets its own `.cognee_vault/` directory. Pass `project_path` to target a specific project:
+- **Data Partitioning**: All project data is stored in `~/.code_intel_store/db/`.
+- **Troubleshooting**: Check `~/.code_intel_store/logs/server.log` if the server encounters issues.
 
-```
-sync_project_memory(project_path="d:/Development/selos")
-search_memory(query="authentication flow", project_path="d:/Development/selos")
-```
-
-> [!IMPORTANT]
-> Add `.cognee_vault/` to each project's `.gitignore`.
+> [!TIP]
+> Ensure **Ollama** is running with `bge-m3:latest` pullled for optimal performance.

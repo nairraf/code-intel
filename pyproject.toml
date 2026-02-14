@@ -1,16 +1,33 @@
 [project]
 name = "agentic-env"
-version = "0.1.0"
-description = "Add your description here"
+version = "3.0.0"
+description = "Lightweight Code Intelligence MCP Server — tree-sitter AST maps + embedding-only RAG"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "cognee>=0.5.1",
-    "fastembed>=0.6.0",
     "fastmcp>=2.14.4",
     "httpx>=0.28.1",
-    "mistralai>=1.9.11",
-    "pydocket>=0.16.6",
     "python-dotenv>=1.2.1",
-    "transformers>=4.57.6",
+    # --- Tree-sitter core + language grammars ---
+    "tree-sitter>=0.24.0",
+    "tree-sitter-python>=0.23.0",
+    "tree-sitter-javascript>=0.23.0",
+    "tree-sitter-typescript>=0.23.0",
+    "tree-sitter-html>=0.23.0",
+    "tree-sitter-css>=0.23.0",
+    "tree-sitter-json>=0.24.0",
+    "tree-sitter-yaml>=0.7.0",
+    "tree-sitter-markdown>=0.4.0",
+    "tree-sitter-sql>=0.3.0",
+    # --- Vector search ---
+    "lancedb>=0.20.0",
+    "pyarrow>=18.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25.0",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.15.1",
 ]
