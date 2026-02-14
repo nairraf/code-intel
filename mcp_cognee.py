@@ -4,6 +4,7 @@ import warnings
 import asyncio
 import logging
 import json
+import hashlib
 import shutil
 from pathlib import Path
 from typing import List
@@ -370,7 +371,7 @@ async def sync_project_memory(project_path: str = None):
             cognee.config.data_root_directory(str(p_vault / ".data_storage"))
 
             # Collect files
-            files_to_add = []
+            candidate_files = []
             for root, dirs, files in os.walk(p_root):
                 dirs[:] = [
                     d for d in dirs
@@ -381,12 +382,46 @@ async def sync_project_memory(project_path: str = None):
                         continue
                     file_path = Path(root) / file
                     if file_path.suffix.lower() in WHITELIST_EXTENSIONS:
-                        files_to_add.append(str(file_path))
+                        candidate_files.append(str(file_path))
 
-            if not files_to_add:
+            if not candidate_files:
                 return "⚠️ No valid files found."
 
-            sys.stderr.write(f"[SYNC] Starting sync for '{p_id}': {len(files_to_add)} files\n")
+            # Content-hash deduplication (Cognee bug workaround: upstream
+            # generates data IDs from content hash only, not file path.
+            # Two files with identical content at different paths produce
+            # the same UUID, causing UNIQUE constraint violations.)
+            seen_hashes = {}
+            files_to_add = []
+            skipped_dupes = []
+            for fpath in candidate_files:
+                try:
+                    content_hash = hashlib.md5(
+                        Path(fpath).read_bytes()
+                    ).hexdigest()
+                    if content_hash in seen_hashes:
+                        skipped_dupes.append(
+                            f"  {Path(fpath).name} (same as {Path(seen_hashes[content_hash]).name})"
+                        )
+                        continue
+                    seen_hashes[content_hash] = fpath
+                    files_to_add.append(fpath)
+                except Exception:
+                    files_to_add.append(fpath)  # If hash fails, include anyway
+
+            if skipped_dupes:
+                sys.stderr.write(
+                    f"[SYNC] Skipped {len(skipped_dupes)} duplicate-content files:\n"
+                    + "\n".join(skipped_dupes) + "\n"
+                )
+
+            if not files_to_add:
+                return "⚠️ No valid files found after deduplication."
+
+            sys.stderr.write(
+                f"[SYNC] Starting sync for '{p_id}': "
+                f"{len(files_to_add)} files ({len(skipped_dupes)} dupes skipped)\n"
+            )
 
             await cognee.add(files_to_add, dataset_name=p_id)
             await cognee.cognify(chunks_per_batch=1)

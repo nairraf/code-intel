@@ -224,6 +224,45 @@ async def test_tool_prune_memory():
                 mock_reset.assert_called_once_with(TEST_ROOT)
 
 # ============================================================================
+# CONTENT DEDUP TESTS
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_sync_deduplicates_identical_content():
+    """Test that files with identical content at different paths are deduplicated."""
+    dedup_root = TEST_ROOT / "dedup_project"
+    dedup_root.mkdir()
+    (dedup_root / ".git").mkdir()
+
+    # Create two CSS files with IDENTICAL content at different paths
+    dir_a = dedup_root / "docs" / "bible" / "net"
+    dir_b = dedup_root / "docs" / "bible" / "webp"
+    dir_a.mkdir(parents=True)
+    dir_b.mkdir(parents=True)
+
+    identical_content = "body { margin: 0; padding: 0; }"
+    (dir_a / "haiola.css").write_text(identical_content)
+    (dir_b / "haiola.css").write_text(identical_content)
+
+    # Also create a file with different content
+    (dedup_root / "main.py").write_text("print('unique')")
+
+    with patch("mcp_cognee.load_cognee_context", return_value=("dedup_test", dedup_root, dedup_root)):
+        with patch("mcp_cognee.check_ollama", return_value=True):
+            with patch("mcp_cognee._nuclear_reset"):
+                with patch("cognee.config.system_root_directory"), \
+                     patch("cognee.config.data_root_directory"):
+                    with patch("cognee.add") as mock_add, patch("cognee.cognify"):
+                        result = await mcp_cognee.sync_project_memory.fn(str(dedup_root))
+
+                        assert "✅ Memory synced" in result
+                        # cognee.add should receive 2 files (one CSS + main.py), not 3
+                        added_files = mock_add.call_args[0][0]
+                        assert len(added_files) == 2
+                        # The result message should mention the dedup count
+                        assert "2 files" in result
+
+# ============================================================================
 # CONCURRENCY TESTS
 # ============================================================================
 
