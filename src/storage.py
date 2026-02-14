@@ -85,3 +85,12 @@ class VectorStore:
         table_name = self._get_table_name(project_root)
         if table_name in self.db.table_names():
             self.db.drop_table(table_name)
+
+    def count_chunks(self, project_root: str) -> int:
+        """Returns the total number of chunks for a project."""
+        table_name = self._get_table_name(project_root)
+        if table_name not in self.db.table_names():
+            return 0
+        
+        table = self.db.open_table(table_name)
+        return table.count_rows()

@@ -35,7 +35,7 @@ The server is **Project Isolated**. Each time you use the tools, the agent handl
 
 ### Typical Workflow
 
-1.  **Indexing**: Run `refresh_index(root_path=".")` to build the semantic map for your current project.
+1.  **Indexing**: Run `refresh_index(root_path=".")` to build the semantic map. Use `force_full_scan=True` to rebuild from scratch.
 2.  **Searching**: Use `search_code(query="how is auth implemented?")` to retrieve relevant code blocks from that specific project.
 
 ## 3. Storage & Logs

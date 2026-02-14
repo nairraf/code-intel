@@ -11,6 +11,8 @@ import tree_sitter_json
 import tree_sitter_markdown
 import tree_sitter_yaml
 import tree_sitter_sql
+import tree_sitter_language_pack as tslp
+
 from tree_sitter import Language, Parser, Node
 
 from .models import CodeChunk
@@ -24,11 +26,11 @@ class CodeParser:
 
     def _init_languages(self):
         """Initialize Tree-sitter languages and parsers."""
-        lang_map = {
+        # Standard bindings
+        exact_map = {
             "python": tree_sitter_python,
             "javascript": tree_sitter_javascript,
             "typescript": tree_sitter_typescript,
-            "tsx": tree_sitter_typescript,
             "html": tree_sitter_html,
             "css": tree_sitter_css,
             "json": tree_sitter_json,
@@ -36,28 +38,42 @@ class CodeParser:
             "sql": tree_sitter_sql,
         }
 
+        # Extensions map
         self.ext_map = {
             ".py": "python", ".js": "javascript", ".jsx": "javascript",
             ".ts": "typescript", ".tsx": "tsx", ".html": "html",
             ".css": "css", ".json": "json", ".yaml": "yaml",
-            ".yml": "yaml", ".md": "markdown", ".sql": "sql"
+            ".yml": "yaml", ".md": "markdown", ".sql": "sql",
+            ".dart": "dart", ".go": "go", ".rs": "rust", 
+            ".java": "java", ".cpp": "cpp", ".c": "c"
         }
 
-        for name, module in lang_map.items():
+        # Initialize standard bindings
+        for name, module in exact_map.items():
             try:
-                # Direct calls to module.language() or specific language functions
-                if name == "typescript" and hasattr(module, "language_typescript"):
-                    lang = Language(module.language_typescript())
-                elif name == "tsx" and hasattr(module, "language_tsx"):
-                    lang = Language(module.language_tsx())
-                elif hasattr(module, "language"):
-                    lang = Language(module.language())
-                else:
-                    continue # Skip if no language function found
-                
+                lang = Language(module.language())
                 self.languages[name] = lang
                 self.parsers[name] = Parser(lang)
             except Exception:
+                pass
+
+        # TypeScript special handling
+        try:
+            self.languages["tsx"] = Language(tree_sitter_typescript.language_tsx())
+            self.parsers["tsx"] = Parser(self.languages["tsx"])
+        except Exception:
+            pass
+
+        # Initialize from language pack (Dart, Go, Rust, etc.)
+        pack_langs = ["dart", "go", "rust", "java", "cpp", "c"]
+        for name in pack_langs:
+            try:
+                # get_language returns a tree_sitter.Language object directly
+                lang = tslp.get_language(name)
+                self.languages[name] = lang
+                self.parsers[name] = Parser(lang)
+            except Exception as e:
+                # print(f"Failed to load {name}: {e}")
                 pass
 
     def parse_file(self, filepath: str) -> List[CodeChunk]:
@@ -111,6 +127,10 @@ class CodeParser:
             "typescript": {"class_declaration", "function_declaration", "method_definition", "interface_declaration", "enum_declaration"},
             "tsx": {"class_declaration", "function_declaration", "method_definition", "interface_declaration"},
             "go": {"function_declaration", "method_declaration", "type_declaration"},
+            "dart": {"class_definition", "function_signature", "method_signature"}, # Inferred, common patterns
+            "java": {"class_declaration", "method_declaration", "interface_declaration"},
+            "rust": {"function_item", "impl_item", "trait_item", "macro_definition"},
+            "cpp": {"function_definition", "class_specifier", "struct_specifier"},
         }
         
         target_types = relevant_types.get(lang_name, set())
@@ -123,6 +143,14 @@ class CodeParser:
         if node.type in targets:
             start_byte = node.start_byte
             end_byte = node.end_byte
+            
+            # --- Dart Special Handling ---
+            # Dart functions/methods are split into (signature, body).
+            if lang == 'dart' and (node.type == 'function_signature' or node.type == 'method_signature'):
+                sib = node.next_named_sibling
+                if sib and sib.type == 'function_body':
+                    end_byte = sib.end_byte
+
             # Handle bytes decode/encode carefully
             # content is str.
             text = content.encode('utf-8')[start_byte:end_byte].decode('utf-8', errors='replace')
@@ -131,10 +159,17 @@ class CodeParser:
                 text,
                 filepath,
                 node.start_point[0] + 1,
-                node.end_point[0] + 1,
+                node.end_point[0] + 1, # Use original end line? no, should update end line if extended
                 node.type,
                 lang
             )
+            
+            # Fix end line for Dart merge
+            if lang == 'dart' and (node.type == 'function_signature' or node.type == 'method_signature'):
+                 sib = node.next_named_sibling
+                 if sib and sib.type == 'function_body':
+                     chunk.end_line = sib.end_point[0] + 1
+
             chunks.append(chunk)
             
             # Optimization: If we found a function, we usually don't need to chunk its internal if-statements 

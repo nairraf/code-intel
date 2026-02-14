@@ -19,9 +19,13 @@ dependencies = [
     "tree-sitter-yaml>=0.7.0",
     "tree-sitter-markdown>=0.4.0",
     "tree-sitter-sql>=0.3.0",
-    # --- Vector search ---
-    "lancedb>=0.20.0",
+    "tree-sitter-go>=0.23.0",
+    "tree-sitter-rust>=0.23.0",
+    "tree-sitter-cpp>=0.23.0",
+    "tree-sitter-java>=0.23.0",
     "pyarrow>=18.0.0",
+    "tree-sitter-languages>=1.10.2",
+    "tree-sitter-language-pack>=0.13.0",
 ]
 
 [dependency-groups]

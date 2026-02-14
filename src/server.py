@@ -60,7 +60,19 @@ async def refresh_index(root_path: str = ".", force_full_scan: bool = False) -> 
     
     project_root_str = str(root)
 
-    stats = {"files_scanned": 0, "chunks_indexed": 0, "errors": 0}
+    # Handle Force Full Scan
+    if force_full_scan:
+        logger.info(f"Force full scan requested for {project_root_str}. Clearing index.")
+        vector_store.clear_project(project_root_str)
+
+    # Initial stats
+    initial_count = vector_store.count_chunks(project_root_str)
+    stats = {
+        "files_scanned": 0, 
+        "chunks_indexed": 0, 
+        "errors": 0,
+        "initial_count": initial_count
+    }
     
     # 1. Discovery
     files_to_process = []
@@ -107,10 +119,14 @@ async def refresh_index(root_path: str = ".", force_full_scan: bool = False) -> 
             
     stats["files_scanned"] = len(files_to_process)
     
+    final_count = vector_store.count_chunks(project_root_str)
+    
     return (
         f"Indexing Complete for project: {project_root_str}\n"
+        f"Operation: {'Full Rebuild' if force_full_scan else 'Incremental Update'}\n"
         f"Files Scanned: {stats['files_scanned']}\n"
-        f"Chunks Indexed: {stats['chunks_indexed']}\n"
+        f"Chunks Added/Updated: {stats['chunks_indexed']}\n"
+        f"Total Chunks in Index: {final_count} (Delta: {final_count - stats['initial_count']})\n"
         f"Errors: {stats['errors']}"
     )
 
@@ -149,6 +165,32 @@ async def search_code(query: str, root_path: str = ".", limit: int = 10) -> str:
         
     except Exception as e:
         return f"Search failed: {e}"
+
+@mcp.tool()
+async def get_stats(root_path: str = ".") -> str:
+    """
+    Returns the current indexing statistics for a project without modifying the index.
+    
+    Args:
+        root_path: The project root to check.
+    """
+    try:
+        root = Path(root_path).resolve()
+        project_root_str = str(root)
+        
+        count = vector_store.count_chunks(project_root_str)
+        
+        if count == 0:
+             return f"No index found for project: {project_root_str}\nStatus: Not Indexed"
+             
+        return (
+            f"code-intel Stats for: {project_root_str}\n"
+            f"----------------------------------------\n"
+            f"Total Chunks: {count}\n"
+            f"Status: Active"
+        )
+    except Exception as e:
+        return f"Failed to get stats: {e}"
 
 if __name__ == "__main__":
     mcp.run()

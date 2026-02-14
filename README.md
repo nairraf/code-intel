@@ -17,7 +17,7 @@ Strict isolation for multiple concurrent projects:
 
 ### 3. Smart AST Parsing 🌳
 - **Semantic Chunking**: Uses Tree-sitter to intelligently extract functions and classes instead of blind text slicing.
-- **Language Support**: Python, JS, TS, HTML, CSS, Go, Rust, Java, and more.
+- **Language Support**: Python, JS, TS, HTML, CSS, Go, Rust, Java, C++, Dart, SQL.
 
 ### 4. GPU-Ready Vector Search ⚡
 - **BGE-M3 (1024 dims)**: Uses the state-of-the-art embedding model via **Ollama**.
@@ -29,8 +29,9 @@ Strict isolation for multiple concurrent projects:
 
 | Tool | Description |
 |:---|:---|
-| `refresh_index` | Scans and indexes the specified project root (fully isolated). |
+| `refresh_index` | Scans and indexes the project. Use `force_full_scan=True` to wipe/rebuild. |
 | `search_code` | Performs a semantic search within the specified project context. |
+| `get_stats` | Returns current index statistics (chunk count) without re-scanning. |
 
 ---
 
