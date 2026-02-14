@@ -422,15 +422,29 @@ async def sync_project_memory(project_path: str = None):
                 f"[SYNC] Starting sync for '{p_id}': "
                 f"{len(files_to_add)} files ({len(skipped_dupes)} dupes skipped)\n"
             )
+            sys.stderr.flush()
 
+            sys.stderr.write("[SYNC] Stage 1/3: Adding files to Cognee...\n")
+            sys.stderr.flush()
             await cognee.add(files_to_add, dataset_name=p_id)
+
+            sys.stderr.write("[SYNC] Stage 2/3: Cognifying (Running LLM analysis)...\n")
+            sys.stderr.flush()
             await cognee.cognify(chunks_per_batch=1)
 
-            return f"✅ Memory synced for '{p_id}' ({len(files_to_add)} files)."
+            sys.stderr.write("[SYNC] Stage 3/3: Finalizing memory...\n")
+            sys.stderr.flush()
+
+            msg = f"✅ Memory synced for '{p_id}' ({len(files_to_add)} files)."
+            sys.stderr.write(f"[SYNC] {msg}\n")
+            sys.stderr.flush()
+            return msg
 
     except Exception as e:
         import traceback
-        sys.stderr.write(traceback.format_exc())
+        err_msg = traceback.format_exc()
+        sys.stderr.write(f"[SYNC ERROR]\n{err_msg}\n")
+        sys.stderr.flush()
         return f"❌ Sync error: {str(e)}"
 
 
