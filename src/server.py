@@ -2,6 +2,7 @@ import sys
 import logging
 import asyncio
 import os
+import builtins
 from pathlib import Path
 from typing import List
 from fastmcp import FastMCP
@@ -23,6 +24,8 @@ from .config import IGNORE_DIRS, SUPPORTED_EXTENSIONS, LOG_DIR
 from .parser import CodeParser
 from .embeddings import OllamaClient
 from .storage import VectorStore
+from .git_utils import batch_get_git_info
+
 
 # Configure logging to file (not stdout!)
 logging.basicConfig(
@@ -34,18 +37,31 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("server")
+logger.debug("server.py: logging configured")
+
 
 # Initialize components
+logger.debug("server.py: initializing FastMCP")
 mcp = FastMCP("Lightweight Code Intel")
+logger.debug("server.py: initializing CodeParser")
 parser = CodeParser()
+logger.debug("server.py: initializing OllamaClient")
 ollama_client = OllamaClient()
+logger.debug("server.py: initializing VectorStore")
 vector_store = VectorStore()
+logger.debug("server.py: all globals initialized")
 
-# Semaphore to control concurrency for embedding generation
-EMBEDDING_SEMAPHORE = asyncio.Semaphore(5) 
+logger.debug("server.py: all globals initialized")
+
+# Semaphores for concurrency control
+# Global limit for Ollama requests across all files
+INFERENCE_SEMAPHORE = asyncio.Semaphore(5)
+# Limit for concurrent file processing
+FILE_PROCESSING_SEMAPHORE = asyncio.Semaphore(10)
 
 @mcp.tool()
 async def refresh_index(root_path: str = ".", force_full_scan: bool = False) -> str:
+    logger.debug(f"Entered refresh_index with root_path={root_path}, force_full_scan={force_full_scan}")
     """
     Scans the workspace, parses code, generates embeddings, and updates the local vector index.
     The index is isolated to this specific project root.
@@ -54,6 +70,7 @@ async def refresh_index(root_path: str = ".", force_full_scan: bool = False) -> 
         root_path: The root directory to scan/index.
         force_full_scan: If True, re-indexes everything.
     """
+    logger.debug(f"refresh_index: resolving root_path {root_path}")
     root = Path(root_path).resolve()
     if not root.exists():
         return f"Error: Path {root} does not exist."
@@ -78,7 +95,6 @@ async def refresh_index(root_path: str = ".", force_full_scan: bool = False) -> 
     files_to_process = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS and d != ".cognee_vault" and not d.startswith(".")]
-        
         for f in filenames:
             if f.startswith("."): continue
             file_path = Path(dirpath) / f
@@ -88,35 +104,56 @@ async def refresh_index(root_path: str = ".", force_full_scan: bool = False) -> 
     if not files_to_process:
         return "No supported code files found."
 
-    # 2. Processing 
+    # 1.5. Git metadata batch fetch
+    logger.debug(f"Fetching git metadata for {len(files_to_process)} files...")
+    git_info = await batch_get_git_info(files_to_process, project_root_str)
+    logger.debug("Git metadata fetch complete.")
+
+    # 2. Processing
+    def _build_embedding_text(chunk):
+        prefix_parts = [chunk.language, chunk.type]
+        if chunk.symbol_name:
+            prefix_parts.append(chunk.symbol_name)
+        prefix = " ".join(prefix_parts)
+        return f"{prefix}: {chunk.content}"
+
     async def process_file(filepath: str):
         try:
+            logger.debug(f"Parsing file: {filepath}")
             chunks = parser.parse_file(filepath)
             if not chunks:
+                logger.debug(f"No chunks parsed from: {filepath}")
                 return 0
+            # Attach git metadata
+            file_git = git_info.get(filepath, {"author": None, "last_modified": None})
+            for chunk in chunks:
+                chunk.author = file_git.get("author")
+                chunk.last_modified = file_git.get("last_modified")
+            texts = [_build_embedding_text(c) for c in chunks]
+            logger.debug(f"Requesting embeddings for {len(texts)} chunks from file: {filepath}")
             
-            texts = [c.content for c in chunks]
+            # The client uses the shared semaphore for throttling
+            embeddings = await ollama_client.get_embeddings_batch(texts, semaphore=INFERENCE_SEMAPHORE)
             
-            async with EMBEDDING_SEMAPHORE:
-                embeddings = await ollama_client.get_embeddings_batch(texts)
-            
+            logger.debug(f"Received embeddings for file: {filepath}")
             if embeddings:
-                # Target the specific project table
                 vector_store.upsert_chunks(project_root_str, chunks, embeddings)
             return len(chunks)
         except Exception as e:
             logger.error(f"Failed to process {filepath}: {e}")
             return e
 
-    tasks = [process_file(f) for f in files_to_process]
+    async def process_file_bounded(f):
+        async with FILE_PROCESSING_SEMAPHORE:
+            return await process_file(f)
+
+    tasks = [process_file_bounded(f) for f in files_to_process]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    
     for r in results:
         if isinstance(r, int):
             stats["chunks_indexed"] += r
         else:
             stats["errors"] += 1
-            
     stats["files_scanned"] = len(files_to_process)
     
     final_count = vector_store.count_chunks(project_root_str)
@@ -155,12 +192,27 @@ async def search_code(query: str, root_path: str = ".", limit: int = 10) -> str:
         output = [f"Results for project: {project_root_str}\n"]
         for r in results:
             score_info = f" (Distance: {r.get('_distance', 'N/A'):.4f})" if '_distance' in r else ""
+            symbol_info = ""
+            if r.get("symbol_name"):
+                symbol_info = f"Symbol: {r['symbol_name']}"
+                if r.get("parent_symbol"):
+                    symbol_info += f" (in {r['parent_symbol']})"
+                symbol_info += "\n"
+            sig_info = f"Signature: {r['signature']}\n" if r.get("signature") else ""
+            lang_info = f"Language: {r['language']}\n" if r.get("language") else ""
+            doc_info = f"Docstring: {r['docstring']}\n" if r.get("docstring") else ""
+            author_info = f"Author: {r['author']}" if r.get("author") else ""
+            modified_info = f" | Modified: {r['last_modified']}" if r.get("last_modified") else ""
+            git_line = f"{author_info}{modified_info}\n" if author_info else ""
             output.append(
                 f"File: {r['filename']} (Lines {r['start_line']}-{r['end_line']}){score_info}\n"
-                f"Type: {r['type']}\n"
+                f"{symbol_info}"
+                f"{sig_info}"
+                f"{lang_info}"
+                f"{doc_info}"
+                f"{git_line}"
                 f"Content:\n```\n{r['content']}\n```\n"
             )
-            
         return "\n---\n".join(output)
         
     except Exception as e:

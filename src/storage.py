@@ -28,6 +28,13 @@ class VectorStore:
             pa.field("end_line", pa.int32()),
             pa.field("type", pa.string()),
             pa.field("language", pa.string()),
+            pa.field("symbol_name", pa.string()),
+            pa.field("parent_symbol", pa.string()),
+            pa.field("signature", pa.string()),
+            pa.field("docstring", pa.string()),
+            pa.field("decorators", pa.string()),  # JSON-encoded list
+            pa.field("last_modified", pa.string()),
+            pa.field("author", pa.string()),
             pa.field("content", pa.string()),
             pa.field("vector", pa.list_(pa.float32(), self.embedding_dims)),
         ])
@@ -46,6 +53,7 @@ class VectorStore:
         table_name = self._get_table_name(project_root)
         table = self._ensure_table(table_name)
         
+        import json
         # Prepare data for insertion
         data = []
         for chunk, vector in zip(chunks, vectors):
@@ -56,6 +64,13 @@ class VectorStore:
                 "end_line": chunk.end_line,
                 "type": chunk.type,
                 "language": chunk.language,
+                "symbol_name": chunk.symbol_name or "",
+                "parent_symbol": chunk.parent_symbol or "",
+                "signature": chunk.signature or "",
+                "docstring": chunk.docstring or "",
+                "decorators": json.dumps(chunk.decorators) if chunk.decorators else "",
+                "last_modified": chunk.last_modified or "",
+                "author": chunk.author or "",
                 "content": chunk.content,
                 "vector": vector
             })

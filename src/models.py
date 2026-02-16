@@ -10,3 +10,10 @@ class CodeChunk(BaseModel):
     content: str
     type: str = "text"  # e.g., "function", "class", "method", "text"
     language: str = "text"
+    symbol_name: Optional[str] = None
+    parent_symbol: Optional[str] = None
+    signature: Optional[str] = None
+    docstring: Optional[str] = None
+    decorators: Optional[List[str]] = None
+    last_modified: Optional[str] = None
+    author: Optional[str] = None

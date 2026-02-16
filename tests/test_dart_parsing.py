@@ -54,10 +54,13 @@ def test_dart_parsing():
     add_func = next((c for c in chunks if "int add(int a, int b)" in c.content), None)
     assert add_func is not None
     assert "return a + b;" in add_func.content
-    assert add_func.type == "function_signature" # We keep the original type of the starting node
-    
+    assert add_func.type == "function_signature"
+    assert add_func.symbol_name == "add"
+
     # Check class
     class_def = next((c for c in chunks if c.type == "class_definition"), None)
+    assert class_def is not None
+    assert class_def.symbol_name == "MyWidget"
     assert class_def is not None
     assert "class MyWidget" in class_def.content
     

@@ -19,13 +19,18 @@ def global_function():
     try:
         chunks = parser.parse_file(str(test_file))
         assert len(chunks) == 3 # Class, method, and global function
-        
         types = [c.type for c in chunks]
         assert "class_definition" in types
         assert "function_definition" in types
-        
-        # Verify content capture
+        # Check symbol_name and parent_symbol
+        class_chunk = next(c for c in chunks if c.type == "class_definition")
+        assert class_chunk.symbol_name == "MyClass"
+        assert class_chunk.parent_symbol is None
+        method_chunk = next(c for c in chunks if c.symbol_name == "method_one")
+        assert method_chunk.parent_symbol == "MyClass"
         func_chunk = next(c for c in chunks if "global_function" in c.content)
+        assert func_chunk.symbol_name == "global_function"
+        assert func_chunk.parent_symbol is None
         assert "return 42" in func_chunk.content
         assert func_chunk.language == "python"
     finally:

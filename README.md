@@ -19,7 +19,13 @@ Strict isolation for multiple concurrent projects:
 - **Semantic Chunking**: Uses Tree-sitter to intelligently extract functions and classes instead of blind text slicing.
 - **Language Support**: Python, JS, TS, HTML, CSS, Go, Rust, Java, C++, Dart, SQL.
 
-### 4. GPU-Ready Vector Search ⚡
+### 4. Performance & Stability ⚡
+- **Async Indexing**: Fully asynchronous pipeline for file scanning and git metadata lookup.
+- **Parallel Git Fetching**: Uses a strict semaphore (max 10) for parallel git subprocesses to ensure stability on Windows.
+- **Persistent Connections**: Reuses embedding client connections for significantly lower latency.
+- **Unified Concurrency**: Global inference semaphore (max 5) prevents local LLM overload during batch processing.
+
+### 5. GPU-Ready Vector Search 🚀
 - **BGE-M3 (1024 dims)**: Uses the state-of-the-art embedding model via **Ollama**.
 - **LanceDB**: Local-first vector storage for sub-millisecond query performance.
 
@@ -48,5 +54,9 @@ Strict isolation for multiple concurrent projects:
 ## 🧪 Testing
 
 ```bash
+# Run all tests
+uv run pytest tests/
+
+# Run specific test
 uv run pytest tests/test_isolation.py
 ```

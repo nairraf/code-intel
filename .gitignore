@@ -12,3 +12,6 @@ wheels/
 # Cognee Local Memory Vault
 .cognee_vault/
 logs/
+
+# IDE files
+.vscode/

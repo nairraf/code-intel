@@ -21,7 +21,8 @@ async def test_strict_isolation():
         # 1. Add data to Project A
         chunk_a = CodeChunk(
             id="a1", filename="file_a.py", start_line=1, end_line=1,
-            content="def secret_a(): pass", type="function", language="python"
+            content="def secret_a(): pass", type="function", language="python",
+            symbol_name="secret_a", parent_symbol=None, signature=None, docstring=None, decorators=None, last_modified=None, author=None
         )
         vec_a = [0.1] * 1024
         store.upsert_chunks(project_a, [chunk_a], [vec_a])
@@ -29,7 +30,8 @@ async def test_strict_isolation():
         # 2. Add data to Project B
         chunk_b = CodeChunk(
             id="b1", filename="file_b.py", start_line=1, end_line=1,
-            content="def secret_b(): pass", type="function", language="python"
+            content="def secret_b(): pass", type="function", language="python",
+            symbol_name="secret_b", parent_symbol=None, signature=None, docstring=None, decorators=None, last_modified=None, author=None
         )
         vec_b = [0.9] * 1024
         store.upsert_chunks(project_b, [chunk_b], [vec_b])

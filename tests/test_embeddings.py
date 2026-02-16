@@ -11,8 +11,8 @@ async def test_successful_embedding_mock(mocker):
     mock_response.json.return_value = {"embedding": [0.1] * EMBEDDING_DIMENSIONS}
     mock_response.raise_for_status = mocker.Mock()
     
-    # Mock httpx.AsyncClient.post
-    mock_post = mocker.patch("httpx.AsyncClient.post", return_value=mock_response)
+    # Mock client.client.post
+    mock_post = mocker.patch.object(client.client, "post", return_value=mock_response)
     
     vec = await client.get_embedding("hello world")
     assert len(vec) == EMBEDDING_DIMENSIONS

@@ -13,9 +13,11 @@ async def test_force_full_scan():
     with patch('src.server.vector_store') as mock_store, \
          patch('src.server.ollama_client') as mock_ollama, \
          patch('src.server.parser') as mock_parser, \
-         patch('src.server.os.walk') as mock_walk:
+         patch('src.server.os.walk') as mock_walk, \
+         patch('src.server.batch_get_git_info', new_callable=AsyncMock) as mock_git:
         
         # Setup mocks
+        mock_git.return_value = {}
         mock_store.count_chunks.side_effect = [5, 10] # Initial count 5, final count 10
         mock_store.clear_project = MagicMock()
         mock_store.upsert_chunks = MagicMock()
@@ -25,8 +27,9 @@ async def test_force_full_scan():
         # Mock parsing a single file
         from src.models import CodeChunk
         mock_parser.parse_file.return_value = [CodeChunk(
-            id="test-id", filename="test.py", start_line=1, end_line=10, 
-            content="print('hello')", type="function", language="python"
+            id="test-id", filename="test.py", start_line=1, end_line=10,
+            content="print('hello')", type="function", language="python",
+            symbol_name="mock_func", parent_symbol=None, signature=None, docstring=None, decorators=None, last_modified=None, author=None
         )]
         
         # Mock file system walk
@@ -53,9 +56,11 @@ async def test_incremental_scan():
     with patch('src.server.vector_store') as mock_store, \
          patch('src.server.ollama_client') as mock_ollama, \
          patch('src.server.parser') as mock_parser, \
-         patch('src.server.os.walk') as mock_walk:
+         patch('src.server.os.walk') as mock_walk, \
+         patch('src.server.batch_get_git_info', new_callable=AsyncMock) as mock_git:
         
         # Setup mocks
+        mock_git.return_value = {}
         mock_store.count_chunks.side_effect = [10, 12] 
         mock_store.clear_project = MagicMock()
         mock_store.upsert_chunks = MagicMock()

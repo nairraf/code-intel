@@ -24,6 +24,8 @@ dependencies = [
     "tree-sitter-cpp>=0.23.0",
     "tree-sitter-java>=0.23.0",
     "pyarrow>=18.0.0",
+    "lancedb>=0.17.0",
+    "duckdb>=1.1.0",
     "tree-sitter-languages>=1.10.2",
     "tree-sitter-language-pack>=0.13.0",
 ]
