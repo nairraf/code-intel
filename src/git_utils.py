@@ -101,17 +101,20 @@ async def batch_get_git_info(filepaths: list, repo_root: str) -> Dict[str, Dict[
 
 async def get_active_branch(repo_root: str) -> str:
     """Get the current active branch name."""
-    try:
-        abs_repo = str(Path(repo_root).resolve())
-        process = await asyncio.create_subprocess_exec(
-            "git", "rev-parse", "--abbrev-ref", "HEAD",
-            cwd=abs_repo,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30)
-        if process.returncode == 0:
-            return stdout.decode().strip()
-    except Exception:
-        logger.error(f"Error getting active branch for {repo_root}:\n{traceback.format_exc()}")
-    return "unknown"
+    def _get_branch():
+        try:
+            abs_repo = str(Path(repo_root).resolve())
+            result = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=abs_repo,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except Exception:
+            pass
+        return "unknown"
+
+    return await asyncio.to_thread(_get_branch)
