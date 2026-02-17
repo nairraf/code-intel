@@ -318,5 +318,7 @@ async def get_stats_impl(root_path: str = ".") -> str:
     except Exception as e:
         return f"Failed to get stats: {e}"
 
+
 if __name__ == "__main__":
     mcp.run()
+
