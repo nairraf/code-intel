@@ -109,7 +109,7 @@ async def get_active_branch(repo_root: str) -> str:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5)
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30)
         if process.returncode == 0:
             return stdout.decode().strip()
     except Exception:
