@@ -25,6 +25,7 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 - [x] "Deep Insights" Stats (Dependency Hubs, Test Gaps, Project Pulse).
 - [x] Stdout Protection (Fortress) for protocol stability.
 - [x] Multi-Project Isolation: Vector storage isolation using project root path hashing.
+- [x] Search Visibility: Exposed Author, Date, and Dependencies in search output.
 - [ ] Optimization of embedding latency via local Ollama caching.
 
 ### Milestone 3: Advanced Intelligence

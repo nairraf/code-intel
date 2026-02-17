@@ -120,7 +120,13 @@ async def search_code_impl(query: str, root_path: str = ".", limit: int = 10) ->
         if not results: return f"No matching code found in project: {project_root_str}"
         output = [f"Results for project: {project_root_str}\n"]
         for r in results:
-            output.append(f"File: {r['filename']} ({r['start_line']}-{r['end_line']})\nSymbol: {r.get('symbol_name', 'N/A')}\nComplexity: {r.get('complexity', 0)}\nContent:\n```\n{r['content']}\n```\n")
+            meta = []
+            if r.get('author'): meta.append(f"Author: {r['author']}")
+            if r.get('last_modified'): meta.append(f"Date: {r['last_modified']}")
+            if r.get('dependencies') and r['dependencies'] != "[]": meta.append(f"Deps: {r['dependencies']}")
+            
+            meta_str = "\n".join(meta) + "\n" if meta else ""
+            output.append(f"File: {r['filename']} ({r['start_line']}-{r['end_line']})\nSymbol: {r.get('symbol_name', 'N/A')}\nComplexity: {r.get('complexity', 0)}\n{meta_str}Content:\n```\n{r['content']}\n```\n")
         return "\n---\n".join(output)
     except Exception as e:
         return f"Search failed: {e}"

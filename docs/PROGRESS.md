@@ -13,6 +13,7 @@
 - [x] Enhanced `get_stats`: Language breakdowns and complexity analysis.
 - [x] "Deep Insights" Stats: Dependency Hubs, Test Gaps, and Project Pulse (Active Branch/Stale Files).
 - [x] Stability: Fixed Windows `get_stats` hang (Synchronous DB + Asyncio Subprocesses).
+- [x] Search Visibility: Author, Date, Dependencies exposed in search results.
 
 ### In Progress
 - [ ] Performance benchmarking for large repositories.
