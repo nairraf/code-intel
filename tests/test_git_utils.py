@@ -44,3 +44,29 @@ async def test_batch_get_git_info_non_git():
         for meta in batch.values():
             assert meta["author"] is None
             assert meta["last_modified"] is None
+
+@pytest.mark.asyncio
+async def test_is_git_repo_timeout_fallback(mocker):
+    import asyncio
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create a .git directory
+        git_dir = Path(tmpdir) / ".git"
+        git_dir.mkdir()
+        
+        # Mock asyncio.wait_for to raise TimeoutError
+        mocker.patch("asyncio.wait_for", side_effect=asyncio.TimeoutError)
+        
+        # Should return True because .git directory exists
+        assert await is_git_repo(tmpdir)
+
+@pytest.mark.asyncio
+async def test_is_git_repo_timeout_no_fallback(mocker):
+    import asyncio
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # No .git directory
+        
+        # Mock asyncio.wait_for to raise TimeoutError
+        mocker.patch("asyncio.wait_for", side_effect=asyncio.TimeoutError)
+        
+        # Should return False because no .git directory
+        assert not await is_git_repo(tmpdir)

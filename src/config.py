@@ -46,4 +46,4 @@ IGNORE_DIRS: Set[str] = {
 
 # --- Database Configuration ---
 LANCEDB_URI = str(VAULT_DIR)
-TABLE_NAME = "code_chunks"
+TABLE_NAME = "chunks"

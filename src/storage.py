@@ -1,10 +1,13 @@
 import lancedb
 import pyarrow as pa
 import hashlib
+import logging
 from typing import List, Optional
 from pathlib import Path
 from .config import LANCEDB_URI, TABLE_NAME, EMBEDDING_DIMENSIONS
 from .models import CodeChunk
+
+logger = logging.getLogger(__name__)
 
 class VectorStore:
     """Storage layer for code chunks using LanceDB with project-level isolation."""
@@ -115,3 +118,51 @@ class VectorStore:
         
         table = self.db.open_table(table_name)
         return table.count_rows()
+
+    def get_detailed_stats(self, project_root: str) -> dict:
+        """Returns detailed architectural statistics for a project."""
+        table_name = self._get_table_name(project_root)
+        if table_name not in self.db.table_names():
+            return {}
+
+        table = self.db.open_table(table_name)
+        # Use to_arrow() to avoid pandas dependency
+        data = table.to_arrow()
+        
+        if len(data) == 0:
+            return {"chunk_count": 0}
+
+        # Python-native aggregation over Arrow data
+        filenames = data.column("filename").to_pylist()
+        languages = data.column("language").to_pylist()
+        complexities = data.column("complexity").to_pylist()
+        symbol_names = data.column("symbol_name").to_pylist()
+
+        from collections import Counter
+        lang_counts = Counter(languages)
+        unique_files = len(set(filenames))
+        
+        avg_comp = sum(complexities) / len(complexities) if complexities else 0
+        max_comp = max(complexities) if complexities else 0
+
+        # Identify high-risk symbols (top 5 by complexity)
+        # Combine into list of dicts for sorting
+        records = []
+        for i in range(len(data)):
+            if complexities[i] > 0:
+                records.append({
+                    "symbol": symbol_names[i] or filenames[i],
+                    "complexity": int(complexities[i]),
+                    "file": filenames[i]
+                })
+        
+        high_risk = sorted(records, key=lambda x: x["complexity"], reverse=True)[:5]
+
+        return {
+            "chunk_count": len(data),
+            "file_count": unique_files,
+            "languages": dict(lang_counts),
+            "avg_complexity": float(avg_comp),
+            "max_complexity": int(max_comp),
+            "high_risk_symbols": high_risk
+        }

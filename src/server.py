@@ -59,16 +59,23 @@ INFERENCE_SEMAPHORE = asyncio.Semaphore(5)
 # Limit for concurrent file processing
 FILE_PROCESSING_SEMAPHORE = asyncio.Semaphore(10)
 
-@mcp.tool()
-async def refresh_index(root_path: str = ".", force_full_scan: bool = False) -> str:
+
+async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False) -> str:
     logger.debug(f"Entered refresh_index with root_path={root_path}, force_full_scan={force_full_scan}")
     """
-    Scans the workspace, parses code, generates embeddings, and updates the local vector index.
-    The index is isolated to this specific project root.
+    Scans the workspace, intelligently parses code using Tree-sitter, and updates the local vector index.
+    
+    Generates high-fidelity metadata including:
+    - Symbol hierarchy (Classes, Functions, Methods)
+    - Full signatures and docstrings
+    - Cyclomatic complexity scores
+    - Dependency mapping (imports/requires)
+    - Language detection
+    - Git authorship and modification history
     
     Args:
         root_path: The root directory to scan/index.
-        force_full_scan: If True, re-indexes everything.
+        force_full_scan: If True, wipes the existing index for this project and rebuilds.
     """
     logger.debug(f"refresh_index: resolving root_path {root_path}")
     root = Path(root_path).resolve()
@@ -110,6 +117,7 @@ async def refresh_index(root_path: str = ".", force_full_scan: bool = False) -> 
     logger.debug("Git metadata fetch complete.")
 
     # 2. Processing
+    git_found_count = 0
     def _build_embedding_text(chunk):
         prefix_parts = [chunk.language, chunk.type]
         if chunk.symbol_name:
@@ -126,6 +134,9 @@ async def refresh_index(root_path: str = ".", force_full_scan: bool = False) -> 
                 return 0
             # Attach git metadata
             file_git = git_info.get(filepath, {"author": None, "last_modified": None})
+            if file_git.get("author"):
+                nonlocal git_found_count
+                git_found_count += 1
             for chunk in chunks:
                 chunk.author = file_git.get("author")
                 chunk.last_modified = file_git.get("last_modified")
@@ -155,6 +166,7 @@ async def refresh_index(root_path: str = ".", force_full_scan: bool = False) -> 
         else:
             stats["errors"] += 1
     stats["files_scanned"] = len(files_to_process)
+    logger.info(f"Indexing summary: {stats['files_scanned']} files scanned, Git info found for {git_found_count} files.")
     
     final_count = vector_store.count_chunks(project_root_str)
     
@@ -168,13 +180,23 @@ async def refresh_index(root_path: str = ".", force_full_scan: bool = False) -> 
     )
 
 @mcp.tool()
-async def search_code(query: str, root_path: str = ".", limit: int = 10) -> str:
+async def refresh_index(root_path: str = ".", force_full_scan: bool = False) -> str:
+    return await refresh_index_impl(root_path, force_full_scan)
+
+async def search_code_impl(query: str, root_path: str = ".", limit: int = 10) -> str:
     """
-    Semantically searches the codebase for the given query, isolated to the current project.
+    Semantically searches for code while providing architectural insights.
+    
+    Returns high-fidelity metadata for each match:
+    - Architectural Insights: Complexity scores and Signature analysis.
+    - Context: Symbol hierarchy, Language detection, and Docstrings.
+    - Relationships: Import-based dependency mapping and Related Tests.
+    - Git History: Authorship and last modified timestamps.
     
     Args:
-        query: Semantic search query.
+        query: Semantic search query (e.g., "how is authentication handled?").
         root_path: The project root to search within.
+        limit: Number of results to return.
     """
     try:
         root = Path(root_path).resolve()
@@ -225,28 +247,49 @@ async def search_code(query: str, root_path: str = ".", limit: int = 10) -> str:
         return f"Search failed: {e}"
 
 @mcp.tool()
+async def search_code(query: str, root_path: str = ".", limit: int = 10) -> str:
+    return await search_code_impl(query, root_path, limit)
+
+@mcp.tool()
 async def get_stats(root_path: str = ".") -> str:
+    return await get_stats_impl(root_path)
+
+async def get_stats_impl(root_path: str = ".") -> str:
     """
-    Returns the current indexing statistics for a project without modifying the index.
+    Returns high-level indexing health and statistics for a project.
     
-    Args:
-        root_path: The project root to check.
+    Provides:
+    - Total chunks currently indexed.
+    - Indexing status (Active/Not Indexed).
     """
     try:
         root = Path(root_path).resolve()
         project_root_str = str(root)
         
-        count = vector_store.count_chunks(project_root_str)
+        stats = vector_store.get_detailed_stats(project_root_str)
         
-        if count == 0:
+        if not stats:
              return f"No index found for project: {project_root_str}\nStatus: Not Indexed"
              
-        return (
-            f"code-intel Stats for: {project_root_str}\n"
-            f"----------------------------------------\n"
-            f"Total Chunks: {count}\n"
-            f"Status: Active"
+        lang_breakdown = "\n".join([f"  - {lang}: {count} chunks" for lang, count in stats["languages"].items()])
+        
+        final_summary = (
+            f"code-intel High-Fidelity Stats for: {project_root_str}\n"
+            f"{'-' * 60}\n"
+            f"Status:           Active\n"
+            f"Total Chunks:     {stats['chunk_count']}\n"
+            f"Unique Files:     {stats['file_count']}\n"
+            f"Avg Complexity:   {stats['avg_complexity']:.2f}\n"
+            f"Max Complexity:   {stats['max_complexity']}\n\n"
+            f"Language Breakdown:\n{lang_breakdown}"
         )
+
+        high_risk_str = ""
+        if stats.get("high_risk_symbols"):
+            high_risk_str = "\n\nTop 5 High-Risk Symbols (Complexity):\n"
+            high_risk_str += "\n".join([f"  - {s['symbol']} ({s['complexity']}) in {Path(s['file']).name}" for s in stats["high_risk_symbols"]])
+
+        return final_summary + high_risk_str
     except Exception as e:
         return f"Failed to get stats: {e}"
 
