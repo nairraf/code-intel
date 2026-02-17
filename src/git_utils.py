@@ -80,6 +80,7 @@ async def get_file_git_info(filepath: str, repo_root: str) -> Dict[str, Optional
 
     return {"author": None, "last_modified": None}
 
+
 async def batch_get_git_info(filepaths: list, repo_root: str) -> Dict[str, Dict[str, Optional[str]]]:
     """
     Get git metadata for a list of files in parallel, limited by a semaphore.
@@ -97,3 +98,20 @@ async def batch_get_git_info(filepaths: list, repo_root: str) -> Dict[str, Dict[
     tasks = [_bounded_get(fp) for fp in set(filepaths)]
     wrapped_results = await asyncio.gather(*tasks)
     return {fp: info for fp, info in wrapped_results}
+
+async def get_active_branch(repo_root: str) -> str:
+    """Get the current active branch name."""
+    try:
+        abs_repo = str(Path(repo_root).resolve())
+        process = await asyncio.create_subprocess_exec(
+            "git", "rev-parse", "--abbrev-ref", "HEAD",
+            cwd=abs_repo,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5)
+        if process.returncode == 0:
+            return stdout.decode().strip()
+    except Exception:
+        logger.error(f"Error getting active branch for {repo_root}:\n{traceback.format_exc()}")
+    return "unknown"

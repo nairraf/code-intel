@@ -15,19 +15,20 @@ Strict isolation for multiple concurrent projects:
 - **Zero Conflict**: Run multiple agents on different projects without write-lock contention.
 - **Unified Store**: All data lives centrally in `~/.code_intel_store/`, keeping your project repos clean.
 
-### 3. Smart AST Parsing 🌳
+### 3. Smart AST Parsing & God Mode 🌳
 - **Semantic Chunking**: Uses Tree-sitter to intelligently extract functions and classes instead of blind text slicing.
-- **Advanced Metadata**: 
-    - **Dependency Extraction**: Automatically identifies imports/using directives for Python, Dart, C#, and JS/TS.
+- **Architectural Insights (God Mode)**:
+    - **Dependency Hubs**: Identifies the "connectivity" of your project by tracking the most imported files.
+    - **Test Gap Analysis**: Correlates cyclomatic complexity with test presence to identify high-risk, unverified code.
     - **Complexity Scoring**: Calculates Cyclomatic Complexity for all semantic chunks.
     - **Test Mapping**: Bidirectionally links source files to their corresponding test files via path heuristics.
 - **Language Support**: Python, JS, TS, HTML, CSS, Go, Rust, Java, C++, Dart, SQL.
 
-### 4. Performance & Stability ⚡
-- **Async Indexing**: Fully asynchronous pipeline for file scanning and git metadata lookup.
+### 4. Git Integration & Stability ⚡
+- **Authorship Tracking**: Automatically extracts author and last-modified timestamps for every code chunk.
+- **Project Pulse**: Real-time reporting of the active branch and count of stale files (>30 days).
 - **Parallel Git Fetching**: Uses a strict semaphore (max 10) for parallel git subprocesses to ensure stability on Windows.
-- **Persistent Connections**: Reuses embedding client connections for significantly lower latency.
-- **Unified Concurrency**: Global inference semaphore (max 5) prevents local LLM overload during batch processing.
+- **Async Pipeline**: Fully asynchronous file scanning and indexing.
 
 ### 5. GPU-Ready Vector Search 🚀
 - **BGE-M3 (1024 dims)**: Uses the state-of-the-art embedding model via **Ollama**.
@@ -40,8 +41,8 @@ Strict isolation for multiple concurrent projects:
 | Tool | Description |
 |:---|:---|
 | `refresh_index` | Scans and indexes the project. Use `force_full_scan=True` to wipe/rebuild. |
-| `search_code` | Performs a semantic search within the specified project context. |
-| `get_stats` | Returns current index statistics (chunk count) without re-scanning. |
+| `search_code` | Semantic search with complexity, dependency, and git metadata insights. |
+| `get_stats` | Returns language breakdowns, High-Risk symbols, Dependency Hubs, Test Gaps, and Project Pulse. |
 
 ---
 

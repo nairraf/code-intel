@@ -11,6 +11,7 @@
 - [x] High-Fidelity Metadata: Complexity, Signatures, Dependencies.
 - [x] Git Integration: Author and Last Modified metadata fix.
 - [x] Enhanced `get_stats`: Language breakdowns and complexity analysis.
+- [x] "God Mode" Stats: Dependency Hubs, Test Gaps, and Project Pulse (Active Branch/Stale Files).
 
 ### In Progress
 - [ ] Performance benchmarking for large repositories.

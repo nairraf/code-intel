@@ -139,14 +139,57 @@ class VectorStore:
         symbol_names = data.column("symbol_name").to_pylist()
 
         from collections import Counter
+        from datetime import datetime, timezone
+        import json
+
         lang_counts = Counter(languages)
         unique_files = len(set(filenames))
         
         avg_comp = sum(complexities) / len(complexities) if complexities else 0
         max_comp = max(complexities) if complexities else 0
 
+        # Architectural Metrics
+        dependency_list = []
+        for d in data.column("dependencies").to_pylist():
+            try:
+                dependency_list.extend(json.loads(d))
+            except:
+                pass
+        
+        dep_hubs = Counter(dependency_list).most_common(5)
+        
+        test_gaps = []
+        stale_count = 0
+        now = datetime.now(timezone.utc)
+        
+        for i in range(len(data)):
+            # Test Gap check: complexity > 10 and no related tests
+            try:
+                rel_tests = json.loads(data.column("related_tests")[i].as_py() or "[]")
+            except:
+                rel_tests = []
+            
+            if complexities[i] > 10 and not rel_tests:
+                test_gaps.append({
+                    "symbol": symbol_names[i] or filenames[i],
+                    "complexity": int(complexities[i]),
+                    "file": filenames[i]
+                })
+
+            # Stale File check: modified > 30 days ago
+            last_mod = data.column("last_modified")[i].as_py()
+            if last_mod:
+                try:
+                    # Expected format: "2026-02-14 15:44:21 -0500"
+                    # We'll take the first part
+                    mod_date_str = last_mod.split(" ")[0]
+                    mod_date = datetime.strptime(mod_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    if (now - mod_date).days > 30:
+                        stale_count += 1
+                except:
+                    pass
+
         # Identify high-risk symbols (top 5 by complexity)
-        # Combine into list of dicts for sorting
         records = []
         for i in range(len(data)):
             if complexities[i] > 0:
@@ -157,6 +200,7 @@ class VectorStore:
                 })
         
         high_risk = sorted(records, key=lambda x: x["complexity"], reverse=True)[:5]
+        test_gaps = sorted(test_gaps, key=lambda x: x["complexity"], reverse=True)[:5]
 
         return {
             "chunk_count": len(data),
@@ -164,5 +208,8 @@ class VectorStore:
             "languages": dict(lang_counts),
             "avg_complexity": float(avg_comp),
             "max_complexity": int(max_comp),
-            "high_risk_symbols": high_risk
+            "high_risk_symbols": high_risk,
+            "dependency_hubs": [{"file": f, "count": c} for f, c in dep_hubs],
+            "test_gaps": test_gaps,
+            "stale_files_count": stale_count
         }

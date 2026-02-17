@@ -256,11 +256,13 @@ async def get_stats(root_path: str = ".") -> str:
 
 async def get_stats_impl(root_path: str = ".") -> str:
     """
-    Returns high-level indexing health and statistics for a project.
-    
-    Provides:
-    - Total chunks currently indexed.
-    - Indexing status (Active/Not Indexed).
+    Provides "God Mode" architectural insights:
+    - Total chunks and unique files currently indexed.
+    - Language breakdown across the codebase.
+    - Top 5 High-Risk Symbols based on cyclomatic complexity.
+    - Top 5 Dependency Hubs (Connectivity) to identify central components.
+    - Test Gap Analysis identifying high-complexity symbols without related tests.
+    - Project Pulse (Active Branch and Stale Files count).
     """
     try:
         root = Path(root_path).resolve()
@@ -284,12 +286,35 @@ async def get_stats_impl(root_path: str = ".") -> str:
             f"Language Breakdown:\n{lang_breakdown}"
         )
 
+        # 1. High Risk Symbols
         high_risk_str = ""
         if stats.get("high_risk_symbols"):
             high_risk_str = "\n\nTop 5 High-Risk Symbols (Complexity):\n"
             high_risk_str += "\n".join([f"  - {s['symbol']} ({s['complexity']}) in {Path(s['file']).name}" for s in stats["high_risk_symbols"]])
 
-        return final_summary + high_risk_str
+        # 2. Dependency Hubs
+        dep_hubs_str = ""
+        if stats.get("dependency_hubs"):
+            dep_hubs_str = "\n\nTop 5 Dependency Hubs (Connectivity):\n"
+            dep_hubs_str += "\n".join([f"  - {h['file']} ({h['count']} imports)" for h in stats["dependency_hubs"]])
+
+        # 3. Test Gaps
+        test_gaps_str = ""
+        if stats.get("test_gaps"):
+            test_gaps_str = "\n\nTest Gaps (High Complexity, No Tests):\n"
+            test_gaps_str += "\n".join([f"  - {g['symbol']} ({g['complexity']}) in {Path(g['file']).name}" for g in stats["test_gaps"]])
+
+        # 4. Project Pulse
+        from .git_utils import get_active_branch
+        branch = await get_active_branch(project_root_str)
+        stale_files = stats.get("stale_files_count", 0)
+        pulse_str = (
+            f"\n\nProject Pulse:\n"
+            f"  - Active Branch: {branch}\n"
+            f"  - Stale Files:   {stale_files} (not touched in 30+ days)"
+        )
+
+        return final_summary + high_risk_str + dep_hubs_str + test_gaps_str + pulse_str
     except Exception as e:
         return f"Failed to get stats: {e}"
 
