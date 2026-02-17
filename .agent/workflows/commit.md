@@ -28,5 +28,6 @@ Any code changes to production code is prohibited in this Workflow. You are only
   - commit and push to github
 
 4. code-intel phase:
-  - update the indexes using your code-intel tool
-  - confirm the stats of the code-intel indexes
+  - perform a full reindex
+  - validate searches are working
+  - confirm the stats
