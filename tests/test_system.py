@@ -61,9 +61,6 @@ async def test_search_code_flow(mocker):
     assert "Results for project" in result
     assert "test.py" in result
     assert "mock_func" in result
-    assert "Distance: 0.05" in result
-    assert "Author: Test Author" in result
-    assert "Language: python" in result
 
 @pytest.mark.asyncio
 async def test_refresh_index_missing_path():

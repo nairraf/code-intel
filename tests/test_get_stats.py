@@ -33,8 +33,9 @@ async def test_get_stats_active():
             
             # Verify stats in output
             assert "Total Chunks:     42" in result
-            assert "Status:           Active" in result
+            assert "Stats for:" in result
             assert "Active Branch: main" in result
+            assert "Project Pulse:" in result
 
 @pytest.mark.asyncio
 async def test_get_stats_empty():
@@ -50,4 +51,4 @@ async def test_get_stats_empty():
             result = await get_stats_impl(root_path="/root")
             
             # Verify output
-            assert "Status: Not Indexed" in result
+            assert "No index found for project" in result

@@ -122,12 +122,28 @@ class VectorStore:
     def get_detailed_stats(self, project_root: str) -> dict:
         """Returns detailed architectural statistics for a project."""
         table_name = self._get_table_name(project_root)
-        if table_name not in self.db.table_names():
+        
+        # Robustly check for table existence (handling different LanceDB return types)
+        try:
+            all_tables = self.db.list_tables()
+            if not isinstance(all_tables, list):
+                # Handle object with .tables attribute
+                all_tables = getattr(all_tables, "tables", [])
+            
+            if table_name not in all_tables:
+                return {}
+        except Exception:
             return {}
 
         table = self.db.open_table(table_name)
-        # Use to_arrow() to avoid pandas dependency
-        data = table.to_arrow()
+        # Select ONLY the columns we need to process to avoid huge memory/time costs
+        columns = ["filename", "language", "complexity", "symbol_name", "dependencies", "related_tests", "last_modified", "author"]
+        try:
+            data = table.search().select(columns).to_arrow()
+        except Exception as e:
+             # Fallback for older LanceDB versions or different interfaces
+             logger.warning(f"LanceDB search().select() failed, falling back to simple to_arrow(): {e}")
+             data = table.to_arrow()
         
         if len(data) == 0:
             return {"chunk_count": 0}

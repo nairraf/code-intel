@@ -22,7 +22,7 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 - [x] Dependency Analysis (Import Mapping).
 - [x] Git History extraction (Author/Date).
 - [x] Enhanced `get_stats` with language and architectural insights.
-- [x] "God Mode" Stats (Dependency Hubs, Test Gaps, Project Pulse).
+- [x] "Deep Insights" Stats (Dependency Hubs, Test Gaps, Project Pulse).
 - [x] Stdout Protection (Fortress) for protocol stability.
 - [x] Multi-Project Isolation: Vector storage isolation using project root path hashing.
 - [ ] Optimization of embedding latency via local Ollama caching.

@@ -46,11 +46,11 @@ async def test_get_detailed_stats_enhancements():
         # This will fail because get_stats_impl doesn't use these fields yet.
         result = await get_stats_impl(project_root)
         
-        assert "Top 5 Dependency Hubs" in result
+        assert "Dependency Hubs" in result
         assert "utils.py (10 imports)" in result
         assert "Test Gaps" in result
         assert "risky_func (15)" in result
-        assert "Project Pulse" in result
+        assert "Project Pulse:" in result
         assert "Active Branch: feat/god-mode" in result
         assert "Stale Files:   3" in result
 

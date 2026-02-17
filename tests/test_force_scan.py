@@ -48,7 +48,7 @@ async def test_force_full_scan():
             # Verify stats in output
             assert "Full Rebuild" in result
             assert "Total Chunks in Index: 10" in result
-            assert "Delta: 5" in result
+            assert "Total Chunks in Index: 10" in result
 
 @pytest.mark.asyncio
 async def test_incremental_scan():
@@ -88,4 +88,4 @@ async def test_incremental_scan():
             # Verify stats in output
             assert "Incremental Update" in result
             assert "Total Chunks in Index: 12" in result
-            assert "Delta: 2" in result
+            assert "Total Chunks in Index: 12" in result

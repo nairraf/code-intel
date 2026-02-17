@@ -15,9 +15,9 @@ Strict isolation for multiple concurrent projects:
 - **Zero Conflict**: Run multiple agents on different projects without write-lock contention.
 - **Unified Store**: All data lives centrally in `~/.code_intel_store/`, keeping your project repos clean.
 
-### 3. Smart AST Parsing & God Mode 🌳
+### 3. Smart AST Parsing & Deep Insights 🌳
 - **Semantic Chunking**: Uses Tree-sitter to intelligently extract functions and classes instead of blind text slicing.
-- **Architectural Insights (God Mode)**:
+- **Architectural Insights (Deep Insights)**:
     - **Dependency Hubs**: Identifies the "connectivity" of your project by tracking the most imported files.
     - **Test Gap Analysis**: Correlates cyclomatic complexity with test presence to identify high-risk, unverified code.
     - **Complexity Scoring**: Calculates Cyclomatic Complexity for all semantic chunks.

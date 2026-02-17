@@ -101,20 +101,31 @@ async def batch_get_git_info(filepaths: list, repo_root: str) -> Dict[str, Dict[
 
 async def get_active_branch(repo_root: str) -> str:
     """Get the current active branch name."""
-    def _get_branch():
+    try:
+        abs_repo = str(Path(repo_root).resolve())
+        process = await asyncio.create_subprocess_exec(
+            "git", "rev-parse", "--abbrev-ref", "HEAD",
+            cwd=abs_repo,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"}
+        )
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5)
+        
+        if process.returncode == 0:
+            return stdout.decode().strip()
+        else:
+            logger.warning(f"Git rev-parse failed for {repo_root}: {stderr.decode().strip()}")
+            return "unknown"
+    except asyncio.TimeoutError:
+        logger.warning(f"Git branch lookup timed out for {repo_root}")
         try:
-            abs_repo = str(Path(repo_root).resolve())
-            result = subprocess.run(
-                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                cwd=abs_repo,
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except Exception:
+            process.kill()
+            await asyncio.wait_for(process.wait(), timeout=1)
+        except:
             pass
         return "unknown"
-
-    return await asyncio.to_thread(_get_branch)
+    except Exception as e:
+        logger.error(f"Error in get_active_branch: {e}")
+        return "unknown"
