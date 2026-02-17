@@ -17,3 +17,6 @@ class CodeChunk(BaseModel):
     decorators: Optional[List[str]] = None
     last_modified: Optional[str] = None
     author: Optional[str] = None
+    dependencies: List[str] = Field(default_factory=list)
+    related_tests: List[str] = Field(default_factory=list)
+    complexity: int = 0

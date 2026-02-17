@@ -120,7 +120,7 @@ async def refresh_index(root_path: str = ".", force_full_scan: bool = False) -> 
     async def process_file(filepath: str):
         try:
             logger.debug(f"Parsing file: {filepath}")
-            chunks = parser.parse_file(filepath)
+            chunks = parser.parse_file(filepath, project_root=project_root_str)
             if not chunks:
                 logger.debug(f"No chunks parsed from: {filepath}")
                 return 0
@@ -204,6 +204,9 @@ async def search_code(query: str, root_path: str = ".", limit: int = 10) -> str:
             author_info = f"Author: {r['author']}" if r.get("author") else ""
             modified_info = f" | Modified: {r['last_modified']}" if r.get("last_modified") else ""
             git_line = f"{author_info}{modified_info}\n" if author_info else ""
+            deps_info = f"Dependencies: {r.get('dependencies', '[]')}\n" if r.get("dependencies") and r.get("dependencies") != "[]" else ""
+            comp_info = f"Complexity: {r.get('complexity', 0)}\n"
+            tests_info = f"Related Tests: {r.get('related_tests', '[]')}\n" if r.get("related_tests") and r.get("related_tests") != "[]" else ""
             output.append(
                 f"File: {r['filename']} (Lines {r['start_line']}-{r['end_line']}){score_info}\n"
                 f"{symbol_info}"
@@ -211,6 +214,9 @@ async def search_code(query: str, root_path: str = ".", limit: int = 10) -> str:
                 f"{lang_info}"
                 f"{doc_info}"
                 f"{git_line}"
+                f"{deps_info}"
+                f"{comp_info}"
+                f"{tests_info}"
                 f"Content:\n```\n{r['content']}\n```\n"
             )
         return "\n---\n".join(output)

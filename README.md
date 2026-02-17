@@ -17,6 +17,10 @@ Strict isolation for multiple concurrent projects:
 
 ### 3. Smart AST Parsing 🌳
 - **Semantic Chunking**: Uses Tree-sitter to intelligently extract functions and classes instead of blind text slicing.
+- **Advanced Metadata**: 
+    - **Dependency Extraction**: Automatically identifies imports/using directives for Python, Dart, C#, and JS/TS.
+    - **Complexity Scoring**: Calculates Cyclomatic Complexity for all semantic chunks.
+    - **Test Mapping**: Bidirectionally links source files to their corresponding test files via path heuristics.
 - **Language Support**: Python, JS, TS, HTML, CSS, Go, Rust, Java, C++, Dart, SQL.
 
 ### 4. Performance & Stability ⚡

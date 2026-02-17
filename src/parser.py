@@ -16,7 +16,7 @@ import tree_sitter_yaml
 import tree_sitter_sql
 import tree_sitter_language_pack as tslp
 
-from tree_sitter import Language, Parser, Node
+from tree_sitter import Language, Parser, Node, Query, QueryCursor
 
 from .models import CodeChunk
 from .config import SUPPORTED_EXTENSIONS
@@ -79,7 +79,7 @@ class CodeParser:
                 # print(f"Failed to load {name}: {e}")
                 pass
 
-    def parse_file(self, filepath: str) -> List[CodeChunk]:
+    def parse_file(self, filepath: str, project_root: Optional[str] = None) -> List[CodeChunk]:
         """Parses a file and returns semantic chunks."""
         ext = Path(filepath).suffix.lower()
         if ext not in getattr(self, 'ext_map', {}):
@@ -95,11 +95,26 @@ class CodeParser:
                 content = f.read()
             
             tree = parser.parse(bytes(content, "utf8"))
+            
+            # Extract file-level dependencies
+            dependencies = self._extract_dependencies(tree.root_node, lang_name)
+            
+            # Find related tests
+            related_tests = []
+            if project_root:
+                related_tests = self._find_related_tests(filepath, project_root)
+
             chunks = self._chunk_node(tree.root_node, content, filepath, lang_name)
             
             # If no semantic chunks found, use fallback
             if not chunks:
-                return self._fallback_parse(filepath)
+                chunks = self._fallback_parse(filepath)
+            
+            # Enrich chunks with file-level metadata
+            for chunk in chunks:
+                chunk.dependencies = dependencies
+                chunk.related_tests = related_tests
+
             return chunks
         except Exception:
             return self._fallback_parse(filepath)
@@ -151,6 +166,7 @@ class CodeParser:
                     end_byte = sib.end_byte
             text = content.encode('utf-8')[start_byte:end_byte].decode('utf-8', errors='replace')
             meta = self._extract_node_metadata(node, lang, content)
+            complexity = self._calculate_complexity(node)
             chunk = self._create_chunk(
                 text,
                 filepath,
@@ -162,7 +178,8 @@ class CodeParser:
                 parent_symbol=parent_name,
                 signature=meta.get("signature"),
                 docstring=meta.get("docstring"),
-                decorators=meta.get("decorators")
+                decorators=meta.get("decorators"),
+                complexity=complexity
             )
             if lang == 'dart' and (node.type == 'function_signature' or node.type == 'method_signature'):
                 sib = node.next_named_sibling
@@ -239,7 +256,8 @@ class CodeParser:
         return metadata
 
     def _create_chunk(self, content: str, filename: str, start: int, end: int, type_: str, lang: str,
-                      symbol_name=None, parent_symbol=None, signature=None, docstring=None, decorators=None) -> CodeChunk:
+                      symbol_name=None, parent_symbol=None, signature=None, docstring=None, 
+                      decorators=None, complexity=0) -> CodeChunk:
         # Create a stable ID based on content and location
         raw_id = f"{filename}:{start}:{end}:{content}"
         chunk_id = hashlib.md5(raw_id.encode('utf-8')).hexdigest()
@@ -255,5 +273,117 @@ class CodeParser:
             parent_symbol=parent_symbol,
             signature=signature,
             docstring=docstring,
-            decorators=decorators
+            decorators=decorators,
+            complexity=complexity
         )
+
+    def _calculate_complexity(self, node: Node) -> int:
+        """Calculates approximate Cyclomatic Complexity (1 + number of decisions)."""
+        complexity_types = {
+            "if_statement", "for_statement", "while_statement", "case_clause", 
+            "catch_clause", "except_clause", "conditional_expression",
+            "elif_clause", "for_in_statement"
+        }
+        
+        def count_decisions(n):
+            count = 0
+            if n.type in complexity_types:
+                count += 1
+            if n.type == "binary_expression":
+                op_node = n.child_by_field_name("operator")
+                if op_node:
+                    op_text = op_node.text.decode("utf-8", errors="replace").lower()
+                    if op_text in ("&&", "||", "and", "or"):
+                        count += 1
+            for child in n.children:
+                count += count_decisions(child)
+            return count
+        
+        return 1 + count_decisions(node)
+
+    def _extract_dependencies(self, root_node: Node, lang: str) -> List[str]:
+        """Extracts import/using dependencies from the root node."""
+        deps = set()
+        language = self.languages.get(lang)
+        if not language:
+            return []
+
+        if lang == "python":
+            query = Query(language, """
+                (import_statement (dotted_name) @name)
+                (import_statement (aliased_import name: (dotted_name) @name))
+                (import_from_statement module_name: (dotted_name) @name)
+                (import_from_statement module_name: (relative_import) @name)
+            """)
+            captures = QueryCursor(query).captures(root_node)
+            for tag, nodes in captures.items():
+                for node in nodes:
+                    deps.add(node.text.decode("utf-8", errors="replace"))
+                
+        elif lang == "dart":
+            query = Query(language, """
+                (import_directive (string_literal) @path)
+                (export_directive (string_literal) @path)
+            """)
+            captures = QueryCursor(query).captures(root_node)
+            for tag, nodes in captures.items():
+                for node in nodes:
+                    deps.add(node.text.decode("utf-8", errors="replace").strip("'\""))
+        
+        elif lang in ("javascript", "typescript", "tsx"):
+            query = Query(language, """
+                (import_statement source: (string) @path)
+                (export_statement source: (string) @path)
+            """)
+            captures = QueryCursor(query).captures(root_node)
+            for tag, nodes in captures.items():
+                for node in nodes:
+                    deps.add(node.text.decode("utf-8", errors="replace").strip("'\""))
+
+        elif lang == "c#":
+            query = Query(language, """
+                (using_directive (identifier) @name)
+                (using_directive (qualified_name) @name)
+            """)
+            captures = QueryCursor(query).captures(root_node)
+            for tag, nodes in captures.items():
+                for node in nodes:
+                    deps.add(node.text.decode("utf-8", errors="replace"))
+        
+        return sorted(list(deps))
+
+    def _find_related_tests(self, filepath: str, project_root: str) -> List[str]:
+        """Heuristic to find test files related to the given source file."""
+        related = []
+        path_obj = Path(filepath)
+        filename = path_obj.stem
+        
+        # Common test patterns
+        patterns = [
+            f"test_{filename}.py",
+            f"{filename}_test.dart",
+            f"{filename}.test.ts",
+            f"{filename}.test.js",
+            f"{filename}Tests.cs",
+            f"Test{filename}.cs"
+        ]
+        
+        # Local search (same directory)
+        for p in patterns:
+            test_file = path_obj.parent / p
+            if test_file.exists():
+                related.append(str(test_file.relative_to(project_root) if project_root else test_file))
+        
+        # Global search (tests/ or test/ directory)
+        # We don't want to walk the whole project here for every file
+        # But maybe we can check expected test directories
+        test_roots = [Path(project_root) / "tests", Path(project_root) / "test"]
+        for tr in test_roots:
+            if tr.exists():
+                for p in patterns:
+                    # Heuristic: check if it exists in the test root with similar subpath
+                    # For now just check direct existence in test root
+                    if (tr / p).exists():
+                        related.append(str((tr / p).relative_to(project_root) if project_root else (tr/p)))
+                        
+        return list(set(related))

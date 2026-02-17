@@ -35,6 +35,9 @@ class VectorStore:
             pa.field("decorators", pa.string()),  # JSON-encoded list
             pa.field("last_modified", pa.string()),
             pa.field("author", pa.string()),
+            pa.field("dependencies", pa.string()),  # JSON-encoded list
+            pa.field("related_tests", pa.string()),  # JSON-encoded list
+            pa.field("complexity", pa.int32()),
             pa.field("content", pa.string()),
             pa.field("vector", pa.list_(pa.float32(), self.embedding_dims)),
         ])
@@ -71,6 +74,9 @@ class VectorStore:
                 "decorators": json.dumps(chunk.decorators) if chunk.decorators else "",
                 "last_modified": chunk.last_modified or "",
                 "author": chunk.author or "",
+                "dependencies": json.dumps(chunk.dependencies) if chunk.dependencies else "[]",
+                "related_tests": json.dumps(chunk.related_tests) if chunk.related_tests else "[]",
+                "complexity": chunk.complexity or 0,
                 "content": chunk.content,
                 "vector": vector
             })
