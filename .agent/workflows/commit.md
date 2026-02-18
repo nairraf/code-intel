@@ -6,12 +6,15 @@ description: Workflow when committing code
 
 You will follow the below steps during this commit stage:
 
-## rules
+## simple commit worklow
 
-Any code changes to production code is prohibited in this Workflow. You are only permitted to execute existing unit tests or add new unit tests if required.
+You can use the simple commit for simple documentation only changes. as long as there are no code changes, you can simply commit to git and push
 
+## code change commit workflow phases
 
-## commit workflow phases
+This worklow must be used when there are code changes. 
+
+Any additional code changes to production code is prohibited in this Workflow. You are only permitted to execute existing unit tests or add new unit tests if required.
 
 1. testing phase:
   - ensure all existing unit tests are passing/green.
@@ -26,8 +29,3 @@ Any code changes to production code is prohibited in this Workflow. You are only
 
 3. git phase:
   - commit and push to github
-
-4. code-intel phase:
-  - perform a full reindex
-  - validate searches are working
-  - confirm the stats
