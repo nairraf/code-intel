@@ -28,8 +28,18 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 - [x] Search Visibility: Exposed Author, Date, and Dependencies in search output.
 - [x] Optimization of embedding latency via local Ollama caching.
 
-### Milestone 3: Advanced Intelligence
-- [ ] Cross-file symbol resolution.
+### Milestone 3: Advanced Intelligence (Cross-File & Graph)
+- [ ] **Phase 3.1: Import Resolution Engine**
+    - [ ] Implement language-specific import resolvers (Python: `sys.path` logic, JS/TS: `node_modules` + `tsconfig`, Dart: `package:`).
+    - [ ] Map "string imports" to "file system paths".
+- [ ] **Phase 3.2: Usage & Reference Analysis**
+    - [ ] Advanced Tree-sitter queries to find *usages* of symbols (not just definitions).
+    - [ ] Link usages to their resolved definitions (The "Jump to Definition" link).
+- [ ] **Phase 3.3: Knowledge Graph Persistence**
+    - [ ] New storage layer (SQLite "edges" table or graph DB).
+    - [ ] Store relationships: `(SourceFile, SourceLine) -> (TargetFile, TargetSymbol)`.
+- [ ] **Phase 3.4: "Trace" Tooling**
+    - [ ] New tool `find_references(symbol)` and `goto_definition(symbol)`.
 - [ ] Integration with more LLM providers.
 - [ ] Real-time indexing on file change.
 
