@@ -18,9 +18,8 @@
 - [x] Performance benchmarking for large repositories.
 - [x] Log cleanup and .gitignore updates.
 - [x] Documentation refinement (Milestone 2).
-
-### In Progress
-- [ ] Milestone 3 Planning.
+- [x] **Milestone 3: Public API & Integration** (`find_definition`, `find_references`).
+- [x] **Milestone 3: Cross-File Linking Engine** (Import Resolution + Knowledge Graph).
 
 ### Upcoming
 - [ ] Cross-file symbol resolution.

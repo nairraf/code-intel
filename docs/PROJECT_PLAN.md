@@ -29,17 +29,20 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 - [x] Optimization of embedding latency via local Ollama caching.
 
 ### Milestone 3: Advanced Intelligence (Cross-File & Graph) (Current)
-- [ ] **Phase 3.1: Import Resolution Engine**
-    - [ ] Implement language-specific import resolvers (Python: `sys.path` logic, JS/TS: `node_modules` + `tsconfig`, Dart: `package:`).
-    - [ ] Map "string imports" to "file system paths".
-- [ ] **Phase 3.2: Usage & Reference Analysis**
-    - [ ] Advanced Tree-sitter queries to find *usages* of symbols (not just definitions).
-    - [ ] Link usages to their resolved definitions (The "Jump to Definition" link).
-- [ ] **Phase 3.3: Knowledge Graph Persistence**
-    - [ ] New storage layer (SQLite "edges" table or graph DB).
-    - [ ] Store relationships: `(SourceFile, SourceLine) -> (TargetFile, TargetSymbol)`.
-- [ ] **Phase 3.4: "Trace" Tooling**
-    - [ ] New tool `find_references(symbol)` and `goto_definition(symbol)`.
+- [x] **Phase 3.1: Import Resolution Engine**
+    - [x] Implement language-specific import resolvers (Python: `sys.path` logic, JS/TS: `node_modules` + `tsconfig`, Dart: `package:`).
+    - [x] Map "string imports" to "file system paths".
+- [x] **Phase 3.2: Usage & Reference Analysis**
+    - [x] Advanced Tree-sitter queries to find *usages* of symbols (not just definitions).
+- [x] **Phase 3.3: Knowledge Graph Persistence**
+    - [x] New storage layer (SQLite "edges" table).
+    - [x] Store relationships: `(SourceChunk) -> (TargetChunk)`.
+- [x] **Phase 3.4: "Trace" Tooling**
+    - [x] New tool `find_references(symbol)` and `find_definition(symbol)`.
+- [ ] **Phase 3.5: Domain-Specific Intelligence (Selos Specials)**
+    - [ ] **Firestore Rules**: Index `match /collection/{id}` paths to link with client-side usage.
+    - [ ] **Mermaid**: Extract nodes from diagrams in `.md` files as "symbols" to link documentation to code.
+    - [ ] **Pubspec**: usage verification for Dart packages.
 - [ ] Integration with more LLM providers.
 - [ ] Real-time indexing on file change.
 

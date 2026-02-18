@@ -104,6 +104,27 @@ class VectorStore:
         results = table.search(query_vector).limit(limit).to_list()
         return results
 
+    def find_chunks_by_symbol(self, project_root: str, symbol_name: str) -> List[dict]:
+        """Finds chunks with a specific symbol name (case-sensitive exact match)."""
+        table_name = self._get_table_name(project_root)
+        if table_name not in self.db.table_names():
+            return []
+        
+        table = self.db.open_table(table_name)
+        # LanceDB uses SQL-like filtering
+        results = table.search().where(f'symbol_name = "{symbol_name}"').to_list()
+        return results
+
+    def get_chunk_by_id(self, project_root: str, chunk_id: str) -> Optional[dict]:
+        """Retrieves a single chunk by its ID."""
+        table_name = self._get_table_name(project_root)
+        if table_name not in self.db.table_names():
+            return None
+        
+        table = self.db.open_table(table_name)
+        results = table.search().where(f'id = "{chunk_id}"').to_list()
+        return results[0] if results else None
+
     def clear_project(self, project_root: str):
         """Wipes the database table for a specific project."""
         table_name = self._get_table_name(project_root)

@@ -24,13 +24,19 @@ Strict isolation for multiple concurrent projects:
     - **Test Mapping**: Bidirectionally links source files to their corresponding test files via path heuristics.
 - **Language Support**: Python, JS, TS, HTML, CSS, Go, Rust, Java, C++, Dart, SQL.
 
-### 4. Git Integration & Stability ⚡
+### 4. Cross-File Symbol Intelligence 🧭
+- **Jump to Definition**: Precisely locate the source of any function, class, or variable across the entire project.
+- **Find References**: Track all call sites and usages of a specific symbol for safe refactorings.
+- **Knowledge Graph**: Persists relationships (call, import, inheritance) in a local SQLite graph for fast traversal.
+- **Import Resolution Engine**: Language-specific logic (Python, TS/JS, Dart) to map standard imports to physical files.
+
+### 5. Git Integration & Stability ⚡
 - **Authorship Tracking**: Automatically extracts author and last-modified timestamps for every code chunk.
 - **Project Pulse**: Real-time reporting of the active branch and count of stale files (>30 days).
 - **Parallel Git Fetching**: Uses a strict semaphore (max 10) for parallel git subprocesses to ensure stability on Windows.
 - **Async Pipeline**: Fully asynchronous file scanning and indexing.
 
-### 5. GPU-Ready Vector Search 🚀
+### 6. GPU-Ready Vector Search 🚀
 - **BGE-M3 (1024 dims)**: Uses the state-of-the-art embedding model via **Ollama**.
 - **LanceDB**: Local-first vector storage for sub-millisecond query performance.
 
@@ -40,9 +46,11 @@ Strict isolation for multiple concurrent projects:
 
 | Tool | Description |
 |:---|:---|
-| `refresh_index` | Scans and indexes the project. Use `force_full_scan=True` to wipe/rebuild. |
+| `refresh_index` | Scans and indexes the project. Rebuilds semantic index and Knowledge Graph symbols. |
 | `search_code` | Semantic search with complexity, dependency, and git metadata insights. |
-| `get_stats` | Returns language breakdowns, High-Risk symbols, Dependency Hubs, Test Gaps, and Project Pulse. |
+| `get_stats` | Architectural overview: High-Risk symbols, Dependency Hubs, Test Gaps, and Pulse. |
+| `find_definition` | Precise jump-to-definition for symbols across files. |
+| `find_references` | Finds all usages and call sites of a symbol in the project. |
 
 ---
 

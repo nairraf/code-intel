@@ -5,7 +5,7 @@ import os
 import builtins
 import traceback
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Optional, Any
 from fastmcp import FastMCP
 
 # --- STDOUT FORTRESS ---
@@ -24,6 +24,8 @@ from .parser import CodeParser
 from .embeddings import OllamaClient
 from .storage import VectorStore
 from .git_utils import batch_get_git_info
+from .knowledge_graph import KnowledgeGraph
+from .linker import SymbolLinker
 
 # Configure logging to file
 logging.basicConfig(
@@ -41,6 +43,8 @@ mcp = FastMCP("Lightweight Code Intel")
 parser = CodeParser()
 ollama_client = OllamaClient()
 vector_store = VectorStore()
+knowledge_graph = KnowledgeGraph()
+linker = SymbolLinker(vector_store, knowledge_graph)
 
 # Semaphores
 INFERENCE_SEMAPHORE = asyncio.Semaphore(5)
@@ -54,6 +58,7 @@ async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False
 
     if force_full_scan:
         vector_store.clear_project(project_root_str)
+        knowledge_graph.clear()
 
     initial_count = vector_store.count_chunks(project_root_str)
     stats = {"files_scanned": 0, "chunks_indexed": 0, "errors": 0, "initial_count": initial_count}
@@ -84,6 +89,9 @@ async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False
             embeddings = await ollama_client.get_embeddings_batch(texts, semaphore=INFERENCE_SEMAPHORE)
             if embeddings:
                 vector_store.upsert_chunks(project_root_str, chunks, embeddings)
+                # Link usages to definitions
+                for chunk in chunks:
+                    linker.link_chunk_usages(project_root_str, chunk)
             return len(chunks)
         except Exception as e:
             logger.error(f"Failed to process {filepath}: {e}")
@@ -109,6 +117,19 @@ async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False
 
 @mcp.tool()
 async def refresh_index(root_path: str = ".", force_full_scan: bool = False) -> str:
+    """
+    Scans, parses, and indexes the codebase for semantic search and symbol linking.
+    
+    BEST FOR:
+    - First-time initialization of a project workspace.
+    - Synchronizing the index after a major refactor or git pull.
+    - Rebuilding the 'Knowledge Graph' (edges) to fix broken jump-to-definition links.
+    
+    Args:
+        root_path: The absolute path to the project root. Defaults to current directory.
+        force_full_scan: If True, wipes the existing index and performs a total rebuild. 
+                         Use this if the index feels stale or corrupted.
+    """
     return await refresh_index_impl(root_path, force_full_scan)
 
 async def search_code_impl(query: str, root_path: str = ".", limit: int = 10) -> str:
@@ -133,10 +154,37 @@ async def search_code_impl(query: str, root_path: str = ".", limit: int = 10) ->
 
 @mcp.tool()
 async def search_code(query: str, root_path: str = ".", limit: int = 10) -> str:
+    """
+    Performs a semantic (vector-based) search over the indexed codebase.
+    
+    BEST FOR:
+    - Finding code related to a concept (e.g., 'how is authentication handled?').
+    - Locating similar implementations across the codebase.
+    - Navigating unfamiliar projects where specific symbol names aren't known.
+    
+    The results include 'Project Pulse' metadata (Git author, complexity, dependencies).
+    
+    Args:
+        query: Natural language description of what you are looking for.
+        root_path: Project root directory to search within.
+        limit: Number of results to return (max recommended: 20).
+    """
     return await search_code_impl(query, root_path, limit)
 
 @mcp.tool()
 async def get_stats(root_path: str = ".") -> str:
+    """
+    Provides a high-level architectural overview and 'Project Pulse' health report.
+    
+    BEST FOR:
+    - Identifying 'High-Risk Symbols' (very high complexity with low test coverage).
+    - Finding 'Dependency Hubs' (central files that might be refactor targets).
+    - Checking the 'Project Pulse' (active branch, stale files).
+    - Quantifying language distribution and technical debt.
+    
+    Args:
+        root_path: Project root directory to analyze.
+    """
     return await get_stats_impl(root_path)
 
 async def get_stats_impl(root_path: str = ".") -> str:
@@ -173,6 +221,80 @@ async def get_stats_impl(root_path: str = ".") -> str:
     except Exception as e:
         logger.error(f"get_stats failed: {e}\n{traceback.format_exc()}")
         return f"Failed to get stats: {e}"
+
+@mcp.tool()
+async def find_definition(filename: str, line: int, symbol_name: Optional[str] = None, root_path: str = ".") -> str:
+    """
+    Locates the source code definition for a specific symbol.
+    
+    BEST FOR:
+    - 'Jump to Definition' logic when you encounter an unfamiliar function or class call.
+    - Understanding the exact implementation details of a specific component.
+    - Resolving imports across multiple files.
+    
+    Args:
+        filename: The file where the symbol is being used.
+        line: The line number of the usage.
+        symbol_name: The exact name of the function, class, or variable to find.
+        root_path: Project root for context.
+    """
+    return await _find_definition(filename, line, symbol_name, root_path)
+
+async def _find_definition(filename: str, line: int, symbol_name: Optional[str] = None, root_path: str = ".") -> str:
+    try:
+        project_root = str(Path(root_path).resolve())
+        if symbol_name:
+            targets = vector_store.find_chunks_by_symbol(project_root, symbol_name)
+            if not targets:
+                return f"No definition found for symbol '{symbol_name}'"
+            
+            output = []
+            for t in targets:
+                output.append(f"File: {t['filename']} ({t['start_line']}-{t['end_line']})\nContent:\n```\n{t['content']}\n```")
+            return "\n---\n".join(output)
+        
+        return "Please provide a symbol_name to find its definition."
+    except Exception as e:
+        return f"Error finding definition: {e}"
+
+@mcp.tool()
+async def find_references(symbol_name: str, root_path: str = ".") -> str:
+    """
+    Finds all locations where a specific symbol is used or called.
+    
+    BEST FOR:
+    - Assessing the impact of a refactor or breaking change.
+    - Finding examples of how a utility function is utilized in real scenarios.
+    - Understanding the dependency reach of a specific module.
+    
+    Args:
+        symbol_name: The exact name of the symbol to track references for.
+        root_path: Project root context.
+    """
+    return await _find_references(symbol_name, root_path)
+
+async def _find_references(symbol_name: str, root_path: str = ".") -> str:
+    try:
+        project_root = str(Path(root_path).resolve())
+        # 1. Find the chunk(s) defining the symbol
+        def_chunks = vector_store.find_chunks_by_symbol(project_root, symbol_name)
+        if not def_chunks:
+            return f"Symbol '{symbol_name}' not found in definitions."
+            
+        all_refs = []
+        for d in def_chunks:
+            edges = knowledge_graph.get_edges(target_id=d["id"], type="call")
+            for source_id, _, _, meta in edges:
+                source_chunk = vector_store.get_chunk_by_id(project_root, source_id)
+                if source_chunk:
+                    all_refs.append(f"Referenced in {source_chunk['filename']} at line {meta.get('line', 'unknown')}\nChunk: {source_chunk.get('symbol_name', 'N/A')}")
+        
+        if not all_refs:
+            return f"No references found for '{symbol_name}' in the knowledge graph."
+            
+        return "\n---\n".join(all_refs)
+    except Exception as e:
+        return f"Error finding references: {e}"
 
 if __name__ == "__main__":
     mcp.run()

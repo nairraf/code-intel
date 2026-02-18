@@ -18,7 +18,7 @@ import tree_sitter_language_pack as tslp
 
 from tree_sitter import Language, Parser, Node, Query, QueryCursor
 
-from .models import CodeChunk
+from .models import CodeChunk, SymbolUsage
 from .config import SUPPORTED_EXTENSIONS
 
 class CodeParser:
@@ -145,7 +145,7 @@ class CodeParser:
             "typescript": {"class_declaration", "function_declaration", "method_definition", "interface_declaration", "enum_declaration"},
             "tsx": {"class_declaration", "function_declaration", "method_definition", "interface_declaration"},
             "go": {"function_declaration", "method_declaration", "type_declaration"},
-            "dart": {"class_definition", "function_signature", "method_signature"},
+            "dart": {"class_definition", "function_signature", "method_signature", "method_declaration"},
             "java": {"class_declaration", "method_declaration", "interface_declaration"},
             "rust": {"function_item", "impl_item", "trait_item", "macro_definition"},
             "cpp": {"function_definition", "class_specifier", "struct_specifier"},
@@ -154,18 +154,23 @@ class CodeParser:
         return self._recursive_chunk(node, full_content, filepath, lang_name, target_types, parent_name=None)
 
     def _recursive_chunk(self, node: Node, content: str, filepath: str, lang: str, targets: set, parent_name: Optional[str] = None) -> List[CodeChunk]:
+        # print(f"[DEBUG] Visit: {node.type}")
         chunks = []
         # Capture current node if it matches
         if node.type in targets:
+            print(f"[DEBUG] Matched target: {node.type}")
             start_byte = node.start_byte
             end_byte = node.end_byte
             # --- Dart Special Handling ---
+            usage_node = node
             if lang == 'dart' and (node.type == 'function_signature' or node.type == 'method_signature'):
                 sib = node.next_named_sibling
                 if sib and sib.type == 'function_body':
                     end_byte = sib.end_byte
+                    usage_node = sib
             text = content.encode('utf-8')[start_byte:end_byte].decode('utf-8', errors='replace')
             meta = self._extract_node_metadata(node, lang, content)
+            usages = self._extract_usages(usage_node, lang)
             complexity = self._calculate_complexity(node)
             chunk = self._create_chunk(
                 text,
@@ -179,7 +184,8 @@ class CodeParser:
                 signature=meta.get("signature"),
                 docstring=meta.get("docstring"),
                 decorators=meta.get("decorators"),
-                complexity=complexity
+                complexity=complexity,
+                usages=usages
             )
             if lang == 'dart' and (node.type == 'function_signature' or node.type == 'method_signature'):
                 sib = node.next_named_sibling
@@ -208,6 +214,15 @@ class CodeParser:
         }
         # --- Symbol name ---
         name_node = node.child_by_field_name("name")
+        if not name_node and lang == "dart":
+            # Dart signatures might have name inside function_signature
+            if node.type == "method_signature" or node.type == "method_declaration":
+                fs = next((c for c in node.children if c.type == "function_signature"), None)
+                if fs:
+                    name_node = fs.child_by_field_name("name")
+            elif node.type == "function_signature":
+                name_node = node.child_by_field_name("name")
+
         if name_node:
             metadata["symbol_name"] = name_node.text.decode("utf-8", errors="replace")
         # --- Signature (functions/methods only) ---
@@ -257,7 +272,7 @@ class CodeParser:
 
     def _create_chunk(self, content: str, filename: str, start: int, end: int, type_: str, lang: str,
                       symbol_name=None, parent_symbol=None, signature=None, docstring=None, 
-                      decorators=None, complexity=0) -> CodeChunk:
+                      decorators=None, complexity=0, usages=None) -> CodeChunk:
         # Create a stable ID based on content and location
         raw_id = f"{filename}:{start}:{end}:{content}"
         chunk_id = hashlib.md5(raw_id.encode('utf-8')).hexdigest()
@@ -274,7 +289,8 @@ class CodeParser:
             signature=signature,
             docstring=docstring,
             decorators=decorators,
-            complexity=complexity
+            complexity=complexity,
+            usages=usages or []
         )
 
     def _calculate_complexity(self, node: Node) -> int:
@@ -321,14 +337,20 @@ class CodeParser:
                     deps.add(node.text.decode("utf-8", errors="replace"))
                 
         elif lang == "dart":
-            query = Query(language, """
-                (import_directive (string_literal) @path)
-                (export_directive (string_literal) @path)
-            """)
+            query = Query(language, "(string_literal) @path")
             captures = QueryCursor(query).captures(root_node)
             for tag, nodes in captures.items():
                 for node in nodes:
-                    deps.add(node.text.decode("utf-8", errors="replace").strip("'\""))
+                    # Check if any parent is import_or_export
+                    p = node.parent
+                    is_import = False
+                    while p:
+                        if p.type == "import_or_export":
+                            is_import = True
+                            break
+                        p = p.parent
+                    if is_import:
+                        deps.add(node.text.decode("utf-8", errors="replace").strip("'\""))
         
         elif lang in ("javascript", "typescript", "tsx"):
             query = Query(language, """
@@ -387,3 +409,88 @@ class CodeParser:
                         related.append(str((tr / p).relative_to(project_root) if project_root else (tr/p)))
                         
         return list(set(related))
+
+    def _extract_usages(self, root_node: Node, lang: str) -> List[SymbolUsage]:
+        """Extracts symbol usages (function calls, instantiations) from the node."""
+        usages = []
+        language = self.languages.get(lang)
+        if not language:
+            return []
+
+        # Queries for usages
+        queries = {
+            "python": """
+                (call function: (identifier) @name)
+                (call function: (attribute attribute: (identifier) @name))
+            """,
+            "javascript": """
+                (call_expression function: (identifier) @name)
+                (call_expression function: (member_expression property: (property_identifier) @name))
+                (new_expression constructor: (identifier) @name)
+            """,
+            "typescript": """
+                (call_expression function: (identifier) @name)
+                (call_expression function: (member_expression property: (property_identifier) @name))
+                (new_expression constructor: (identifier) @name)
+            """,
+            "tsx": """
+                (call_expression function: (identifier) @name)
+                (call_expression function: (member_expression property: (property_identifier) @name))
+                (new_expression constructor: (identifier) @name)
+                (jsx_opening_element name: (identifier) @name) 
+                (jsx_self_closing_element name: (identifier) @name)
+            """,
+            "dart": """
+                (identifier) @name
+                (type_identifier) @name
+            """
+        }
+        
+        query_str = queries.get(lang)
+        if not query_str:
+            return []
+            
+        try:
+            query = Query(language, query_str)
+            captures = QueryCursor(query).captures(root_node)
+            
+            # Handle list of tuples (node, name) - standard tree-sitter
+            if isinstance(captures, list):
+                 for node, tag in captures:
+                    name = node.text.decode("utf-8", errors="replace")
+                    start_point = node.start_point
+                    
+                    context = "call"
+                    if node.parent.type == "new_expression" or node.parent.type == "constructor_name":
+                       context = "instantiation"
+                    
+                    usages.append(SymbolUsage(
+                        name=name,
+                        line=start_point[0] + 1,
+                        character=start_point[1],
+                        context=context
+                    ))
+            
+            # Handle dict {name: [nodes]} - legacy/other bindings
+            elif isinstance(captures, dict):
+                for tag, nodes in captures.items():
+                    for node in nodes:
+                        name = node.text.decode("utf-8", errors="replace")
+                        # Usage location
+                        start_point = node.start_point
+                        
+                        # Context inference (simplified)
+                        context = "call"
+                        if node.parent.type == "new_expression" or node.parent.type == "constructor_name":
+                           context = "instantiation"
+                        
+                        usages.append(SymbolUsage(
+                            name=name,
+                            line=start_point[0] + 1,
+                            character=start_point[1],
+                            context=context
+                        ))
+        except Exception:
+            pass
+            
+        return usages
