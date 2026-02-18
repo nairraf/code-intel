@@ -45,6 +45,11 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 - [x] **Phase 3.5: Domain-Specific Intelligence (Selos Specials)**
     - [x] **Firestore Rules**: Index `match` paths for client-side linking.
     - [x] **Mermaid**: Extract labels from diagrams to link documentation to code.
+- [ ] **Phase 3.6: Advanced Linking & Discovery**
+    - [ ] **Granular Symbol Mapping**: Link string literals in code to Firestore `match` paths.
+    - [ ] **Mermaid "Soft Links"**: Connect diagram node labels to actual class/function definitions.
+    - [ ] **Script Discovery**: Implement heuristic linking for standalone scripts (no imports).
+    - [ ] **Entry-Point Detection**: Weight files with `main` blocks higher in the Knowledge Graph.
 - [ ] Integration with more LLM providers.
 - [ ] Real-time indexing on file change.
 
