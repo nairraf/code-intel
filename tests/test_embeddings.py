@@ -6,6 +6,11 @@ from src.config import EMBEDDING_DIMENSIONS
 @pytest.mark.asyncio
 async def test_successful_embedding_mock(mocker):
     client = OllamaClient()
+    # Force cache miss
+    mocker.patch.object(client.cache, "get", return_value=None)
+    # Mock cache set to avoid writing to real DB
+    mocker.patch.object(client.cache, "set")
+
     mock_response = mocker.Mock()
     mock_response.status_code = 200
     mock_response.json.return_value = {"embedding": [0.1] * EMBEDDING_DIMENSIONS}
@@ -22,6 +27,9 @@ async def test_successful_embedding_mock(mocker):
 @pytest.mark.asyncio
 async def test_embedding_retry_logic(mocker):
     client = OllamaClient()
+    # Force cache miss
+    mocker.patch.object(client.cache, "get", return_value=None)
+    mocker.patch.object(client.cache, "set")
     
     # First call fails, second succeeds
     fail_response = mocker.Mock()
@@ -44,6 +52,10 @@ async def test_embedding_retry_logic(mocker):
 @pytest.mark.asyncio
 async def test_embedding_dimension_mismatch(mocker, caplog):
     client = OllamaClient()
+    # Force cache miss
+    mocker.patch.object(client.cache, "get", return_value=None)
+    mocker.patch.object(client.cache, "set")
+
     mock_response = mocker.Mock()
     mock_response.status_code = 200
     # Wrong dimensions

@@ -21,6 +21,11 @@ for d in [VAULT_DIR, LOG_DIR]:
         d = PROJECT_ROOT / ".code_intel_store" / d.name
         d.mkdir(parents=True, exist_ok=True)
 
+# Cache Directory (Shared global cache)
+CACHE_DIR = VAULT_ROOT / "cache"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+CACHE_DB_PATH = CACHE_DIR / "embeddings.sqlite"
+
 # --- Embedding Configuration ---
 # bge-m3 is the architectural standard for this project
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "bge-m3:latest")

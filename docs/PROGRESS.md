@@ -14,10 +14,11 @@
 - [x] "Deep Insights" Stats: Dependency Hubs, Test Gaps, and Project Pulse (Active Branch/Stale Files).
 - [x] Stability: Fixed Windows `get_stats` hang (Synchronous DB + Asyncio Subprocesses).
 - [x] Search Visibility: Author, Date, Dependencies exposed in search results.
+- [x] Optimization of embedding latency via local Ollama caching (2.8x - 150x speedup).
+- [x] Performance benchmarking for large repositories.
 
 ### In Progress
-- [ ] Performance benchmarking for large repositories.
+- [ ] Documentation refinement (Milestones 3 & 4).
 
 ### Upcoming
-- [ ] Optimization of embedding latency via local Ollama caching.
-- [ ] Documentation refinement (Milestones 3 & 4).
+- [ ] Cross-file symbol resolution.
