@@ -16,7 +16,7 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 - [x] Semantic chunking logic.
 - [x] Multi-language support (Python, JS, TS, etc.).
 
-### Milestone 2: High-Fidelity Metadata & Stability (Current)
+### Milestone 2: High-Fidelity Metadata & Stability (Completed)
 - [x] Advanced AST Parsing for Symbol Recognition.
 - [x] Complexity Scoring (Cyclomatic).
 - [x] Dependency Analysis (Import Mapping).
@@ -28,7 +28,7 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 - [x] Search Visibility: Exposed Author, Date, and Dependencies in search output.
 - [x] Optimization of embedding latency via local Ollama caching.
 
-### Milestone 3: Advanced Intelligence (Cross-File & Graph)
+### Milestone 3: Advanced Intelligence (Cross-File & Graph) (Current)
 - [ ] **Phase 3.1: Import Resolution Engine**
     - [ ] Implement language-specific import resolvers (Python: `sys.path` logic, JS/TS: `node_modules` + `tsconfig`, Dart: `package:`).
     - [ ] Map "string imports" to "file system paths".
