@@ -16,3 +16,6 @@ logs/
 
 # IDE files
 .vscode/
+
+# Logs
+*.log
