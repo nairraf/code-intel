@@ -9,14 +9,23 @@ class PythonImportResolver(ImportResolver):
     Assumes standard project structure where imports are relative to project_root
     or site-packages (ignored for now).
     """
+    def __init__(self, project_root: Optional[str] = None):
+        self.project_root = project_root
 
-    def resolve(self, project_root: Path, source_file: str, import_string: str) -> Optional[str]:
+
+    def resolve(self, source_file: str, import_string: str, project_root: Optional[Path] = None) -> Optional[str]:
         """
         Args:
-            project_root: The project base directory
             source_file: "/path/to/project/src/module.py"
             import_string: "src.utils" or ".utils" or ".."
+            project_root: The project base directory
         """
+        if project_root is None:
+            if self.project_root:
+                project_root = Path(self.project_root)
+            else:
+                return None
+                
         source_path = Path(source_file)
         
         # 1. Handle Relative Imports (starting with .)

@@ -16,6 +16,7 @@ class CodeChunk(BaseModel):
     start_line: int
     end_line: int
     content: str
+    content_hash: Optional[str] = None
     type: str = "text"  # e.g., "function", "class", "method", "text"
     language: str = "text"
     symbol_name: Optional[str] = None

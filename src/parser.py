@@ -20,6 +20,7 @@ from tree_sitter import Language, Parser, Node, Query, QueryCursor
 
 from .models import CodeChunk, SymbolUsage
 from .config import SUPPORTED_EXTENSIONS
+from .parsers.firestore import FirestoreRulesParser
 
 class CodeParser:
     def __init__(self):
@@ -48,7 +49,8 @@ class CodeParser:
             ".css": "css", ".json": "json", ".yaml": "yaml",
             ".yml": "yaml", ".md": "markdown", ".sql": "sql",
             ".dart": "dart", ".go": "go", ".rs": "rust", 
-            ".java": "java", ".cpp": "cpp", ".c": "c"
+            ".java": "java", ".cpp": "cpp", ".c": "c",
+            ".rules": "firestore"
         }
 
         # Initialize standard bindings
@@ -86,6 +88,11 @@ class CodeParser:
             return self._fallback_parse(filepath)
 
         lang_name = self.ext_map[ext]
+        
+        # Specialized parsers
+        if lang_name == "firestore":
+            return FirestoreRulesParser().parse(filepath)
+
         if lang_name not in self.parsers:
             return self._fallback_parse(filepath)
 
@@ -115,6 +122,11 @@ class CodeParser:
                 chunk.dependencies = dependencies
                 chunk.related_tests = related_tests
 
+            # Mermaid check for markdown
+            if lang_name == "markdown":
+                mermaid_chunks = self._extract_mermaid_chunks(content, filepath)
+                chunks.extend(mermaid_chunks)
+
             return chunks
         except Exception:
             return self._fallback_parse(filepath)
@@ -140,12 +152,12 @@ class CodeParser:
     def _chunk_node(self, node: Node, full_content: str, filepath: str, lang_name: str) -> List[CodeChunk]:
         """Walks the AST and extracts meaningful chunks."""
         relevant_types = {
-            "python": {"class_definition", "function_definition"},
+            "python": {"class_definition", "function_definition", "assignment"},
             "javascript": {"class_declaration", "function_declaration", "method_definition", "arrow_function"},
             "typescript": {"class_declaration", "function_declaration", "method_definition", "interface_declaration", "enum_declaration"},
             "tsx": {"class_declaration", "function_declaration", "method_definition", "interface_declaration"},
             "go": {"function_declaration", "method_declaration", "type_declaration"},
-            "dart": {"class_definition", "function_signature", "method_signature", "method_declaration"},
+            "dart": {"class_definition", "function_signature", "method_signature", "method_declaration", "static_final_declaration_list", "initialized_identifier_list", "declaration"},
             "java": {"class_declaration", "method_declaration", "interface_declaration"},
             "rust": {"function_item", "impl_item", "trait_item", "macro_definition"},
             "cpp": {"function_definition", "class_specifier", "struct_specifier"},
@@ -158,7 +170,28 @@ class CodeParser:
         chunks = []
         # Capture current node if it matches
         if node.type in targets:
-            print(f"[DEBUG] Matched target: {node.type}")
+            # Scope Check: For assignments/declarations, only index if they are at the top level
+            # python assignments are children of expression_statement, whose parent is module
+            # dart declarations are direct children of program
+            is_global = False
+            if lang == "python" and node.type == "assignment":
+                if node.parent and node.parent.type == "expression_statement":
+                    if node.parent.parent and node.parent.parent.type == "module":
+                        is_global = True
+                if not is_global:
+                    for child in node.children:
+                        chunks.extend(self._recursive_chunk(child, content, filepath, lang, targets, parent_name=parent_name))
+                    return chunks
+
+            if lang == "dart" and node.type in ("static_final_declaration_list", "initialized_identifier_list", "declaration"):
+                if node.parent and node.parent.type == "program":
+                    is_global = True
+                if not is_global:
+                    for child in node.children:
+                        chunks.extend(self._recursive_chunk(child, content, filepath, lang, targets, parent_name=parent_name))
+                    return chunks
+
+            # print(f"[DEBUG] Matched target: {node.type}")
             start_byte = node.start_byte
             end_byte = node.end_byte
             # --- Dart Special Handling ---
@@ -216,12 +249,26 @@ class CodeParser:
         name_node = node.child_by_field_name("name")
         if not name_node and lang == "dart":
             # Dart signatures might have name inside function_signature
-            if node.type == "method_signature" or node.type == "method_declaration":
+            if node.type in ("method_signature", "method_declaration"):
                 fs = next((c for c in node.children if c.type == "function_signature"), None)
                 if fs:
                     name_node = fs.child_by_field_name("name")
             elif node.type == "function_signature":
                 name_node = node.child_by_field_name("name")
+            elif node.type == "static_final_declaration_list":
+                # Find identifier in side static_final_declaration
+                decl = next((c for c in node.children if c.type == "static_final_declaration"), None)
+                if decl:
+                    name_node = next((c for c in decl.children if c.type == "identifier"), None)
+            elif node.type == "initialized_identifier_list":
+                decl = next((c for c in node.children if c.type == "initialized_identifier"), None)
+                if decl:
+                    name_node = next((c for c in decl.children if c.type == "identifier"), None)
+        
+        if not name_node and lang == "python" and node.type == "assignment":
+            name_node = node.child_by_field_name("left")
+            if not name_node: # try first child identifier
+                name_node = next((c for c in node.children if c.type == "identifier"), None)
 
         if name_node:
             metadata["symbol_name"] = name_node.text.decode("utf-8", errors="replace")
@@ -494,3 +541,37 @@ class CodeParser:
             pass
             
         return usages
+
+    def _extract_mermaid_chunks(self, content: str, filepath: str) -> List[CodeChunk]:
+        """Extracts nodes from Mermaid blocks in Markdown as searchable chunks."""
+        chunks = []
+        # Find mermaid blocks
+        mermaid_pattern = re.compile(r'```mermaid\s*(.*?)\s*```', re.DOTALL)
+        
+        # Node labels pattern: id["Label"], id(Label), id[Label], etc.
+        node_pattern = re.compile(r'(\w+)(\[[^\]]+\]|\([^)]+\)|\{\{[^}]+\}\}|\[\[[^\]]+\]\]|\>[^\]]+\b\])')
+        
+        for m_match in mermaid_pattern.finditer(content):
+            mermaid_code = m_match.group(1)
+            offset = m_match.start(1)
+            
+            for n_match in node_pattern.finditer(mermaid_code):
+                node_id = n_match.group(1)
+                label = n_match.group(2).strip('[](){}>')
+                
+                # Calculate line number
+                start_index = offset + n_match.start()
+                start_line = content[:start_index].count('\n') + 1
+                
+                chunks.append(CodeChunk(
+                    id=f"mermaid:{filepath}:{node_id}:{start_line}",
+                    filename=filepath,
+                    start_line=start_line,
+                    end_line=start_line,
+                    content=n_match.group(0),
+                    type="mermaid_node",
+                    language="mermaid",
+                    symbol_name=node_id,
+                    signature=f"Node {node_id} ({label})"
+                ))
+        return chunks

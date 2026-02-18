@@ -12,10 +12,17 @@ class DartImportResolver(ImportResolver):
     - Package imports (import 'package:my_project/foo.dart' -> lib/foo.dart)
     """
 
-    def __init__(self):
+    def __init__(self, project_root: Optional[str] = None):
+        self.project_root = project_root
         self._package_cache = {} # root_path -> package_name
     
-    def resolve(self, project_root: Path, source_file: str, import_string: str) -> Optional[str]:
+    def resolve(self, source_file: str, import_string: str, project_root: Optional[Path] = None) -> Optional[str]:
+        if project_root is None:
+            if self.project_root:
+                project_root = Path(self.project_root)
+            else:
+                return None
+                
         # 1. Handle Package Imports
         if import_string.startswith('package:'):
             return self._resolve_package(project_root, import_string)

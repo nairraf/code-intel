@@ -39,10 +39,12 @@ A lightweight, high-performance MCP server providing semantic code search and AS
     - [x] Store relationships: `(SourceChunk) -> (TargetChunk)`.
 - [x] **Phase 3.4: "Trace" Tooling**
     - [x] New tool `find_references(symbol)` and `find_definition(symbol)`.
-- [ ] **Phase 3.5: Domain-Specific Intelligence (Selos Specials)**
-    - [ ] **Firestore Rules**: Index `match /collection/{id}` paths to link with client-side usage.
-    - [ ] **Mermaid**: Extract nodes from diagrams in `.md` files as "symbols" to link documentation to code.
-    - [ ] **Pubspec**: usage verification for Dart packages.
+- [x] **Phase 3.4.6: Global Symbol Excellence**
+    - [x] Index top-level variables and constants (Dart/Python).
+    - [x] Enable cross-file navigation for non-structural symbols.
+- [x] **Phase 3.5: Domain-Specific Intelligence (Selos Specials)**
+    - [x] **Firestore Rules**: Index `match` paths for client-side linking.
+    - [x] **Mermaid**: Extract labels from diagrams to link documentation to code.
 - [ ] Integration with more LLM providers.
 - [ ] Real-time indexing on file change.
 

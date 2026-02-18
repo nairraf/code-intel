@@ -21,5 +21,10 @@
 - [x] **Milestone 3: Public API & Integration** (`find_definition`, `find_references`).
 - [x] **Milestone 3: Cross-File Linking Engine** (Import Resolution + Knowledge Graph).
 
+### In Progress
+- [x] **Phase 3.4.5: Incremental Indexing Excellence** (File Hashing + Skip Logic).
+- [x] **Phase 3.4.6: Global Symbol Excellence** (Variable/Constant resolution).
+- [x] **Phase 3.5: Domain-Specific Intelligence** (Firestore Rules, Mermaid).
+
 ### Upcoming
-- [ ] Cross-file symbol resolution.
+- [ ] Cross-file symbol resolution refinements.

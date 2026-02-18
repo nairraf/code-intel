@@ -4,20 +4,18 @@ import asyncio
 import os
 import builtins
 import traceback
+import hashlib
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from fastmcp import FastMCP
 
 # --- STDOUT FORTRESS ---
-import builtins
 _original_print = builtins.print
 
 def safe_print(*args, **kwargs):
     if 'file' not in kwargs or kwargs['file'] is None or kwargs['file'] == sys.stdout:
         kwargs['file'] = sys.stderr
     _original_print(*args, **kwargs)
-
-builtins.print = safe_print
 
 from .config import IGNORE_DIRS, SUPPORTED_EXTENSIONS, LOG_DIR
 from .parser import CodeParser
@@ -50,34 +48,69 @@ linker = SymbolLinker(vector_store, knowledge_graph)
 INFERENCE_SEMAPHORE = asyncio.Semaphore(5)
 FILE_PROCESSING_SEMAPHORE = asyncio.Semaphore(10)
 
+def _hash_file(filepath: str) -> str:
+    """Computes SHA-256 hash of a file."""
+    sha256 = hashlib.sha256()
+    try:
+        with open(filepath, "rb") as f:
+            while chunk := f.read(8192):
+                sha256.update(chunk)
+        return sha256.hexdigest()
+    except Exception as e:
+        logger.error(f"Failed to hash file {filepath}: {e}")
+        return ""
+
 async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False) -> str:
     root = Path(root_path).resolve()
     if not root.exists():
         return f"Error: Path {root} does not exist."
-    project_root_str = str(root)
+    project_root_str = root.as_posix()
 
     if force_full_scan:
         vector_store.clear_project(project_root_str)
         knowledge_graph.clear()
 
     initial_count = vector_store.count_chunks(project_root_str)
-    stats = {"files_scanned": 0, "chunks_indexed": 0, "errors": 0, "initial_count": initial_count}
+    existing_hashes = {} if force_full_scan else vector_store.get_project_hashes(project_root_str)
+    
+    stats = {"files_scanned": 0, "chunks_indexed": 0, "errors": 0, "initial_count": initial_count, "skipped": 0}
     
     files_to_process = []
+    files_to_skip = []
+    
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS and not d.startswith(".")]
         for f in filenames:
             if f.startswith("."): continue
             file_path = Path(dirpath) / f
             if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
-                files_to_process.append(str(file_path))
+                file_str = file_path.resolve().as_posix()
+                current_hash = _hash_file(file_str)
+                
+                stored_hash = existing_hashes.get(file_str)
+                
+                if not force_full_scan and stored_hash == current_hash:
+                    files_to_skip.append(file_str)
+                else:
+                    files_to_process.append((file_str, current_hash))
 
-    if not files_to_process:
+    if not files_to_process and not files_to_skip:
         return "No supported code files found."
 
-    git_info = await batch_get_git_info(files_to_process, project_root_str)
+    stats["files_scanned"] = len(files_to_process) + len(files_to_skip)
+    stats["skipped"] = len(files_to_skip)
 
-    async def process_file(filepath: str):
+    if not files_to_process:
+        return (
+            f"Indexing Complete (All {stats['skipped']} files unchanged).\n"
+            f"Total Chunks in Index: {initial_count}"
+        )
+
+    # Process only files that changed
+    just_filepaths = [f[0] for f in files_to_process]
+    git_info = await batch_get_git_info(just_filepaths, project_root_str)
+
+    async def process_file(filepath: str, file_hash: str):
         try:
             chunks = parser.parse_file(filepath, project_root=project_root_str)
             if not chunks: return 0
@@ -85,6 +118,7 @@ async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False
             for chunk in chunks:
                 chunk.author = file_git.get("author")
                 chunk.last_modified = file_git.get("last_modified")
+                chunk.content_hash = file_hash
             texts = [f"{c.language} {c.type} {c.symbol_name}: {c.content}" for c in chunks]
             embeddings = await ollama_client.get_embeddings_batch(texts, semaphore=INFERENCE_SEMAPHORE)
             if embeddings:
@@ -97,21 +131,21 @@ async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False
             logger.error(f"Failed to process {filepath}: {e}")
             return 0
 
-    async def process_file_bounded(f):
+    async def process_file_bounded(file_data):
+        filepath, file_hash = file_data
         async with FILE_PROCESSING_SEMAPHORE:
-            return await process_file(f)
+            return await process_file(filepath, file_hash)
 
-    tasks = [process_file_bounded(f) for f in files_to_process]
+    tasks = [process_file_bounded(fd) for fd in files_to_process]
     results = await asyncio.gather(*tasks)
     stats["chunks_indexed"] = sum(results)
-    stats["files_scanned"] = len(files_to_process)
     
     final_count = vector_store.count_chunks(project_root_str)
     scan_type = "Full Rebuild" if force_full_scan else "Incremental Update"
     return (
         f"Indexing Complete for project: {project_root_str}\n"
         f"Scan Type: {scan_type}\n"
-        f"Files Scanned: {stats['files_scanned']}\n"
+        f"Files Scanned: {stats['files_scanned']} ({stats['skipped']} skipped)\n"
         f"Total Chunks in Index: {final_count}"
     )
 
@@ -297,4 +331,6 @@ async def _find_references(symbol_name: str, root_path: str = ".") -> str:
         return f"Error finding references: {e}"
 
 if __name__ == "__main__":
+    # Apply stdout protection only when running as a server
+    builtins.print = safe_print
     mcp.run()

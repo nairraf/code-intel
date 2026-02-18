@@ -13,7 +13,7 @@ class ImportResolver(ABC):
         pass
 
     @abstractmethod
-    def resolve(self, project_root: Path, source_file: str, import_string: str) -> Optional[str]:
+    def resolve(self, source_file: str, import_string: str, project_root: Optional[Path] = None) -> Optional[str]:
         """
         Resolves an import string to an absolute file path.
         

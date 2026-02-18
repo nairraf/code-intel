@@ -18,7 +18,7 @@ class VectorStore:
 
     def _get_table_name(self, project_root: str) -> str:
         """Generates a stable, unique table name for a given project root."""
-        abs_path = str(Path(project_root).resolve())
+        abs_path = Path(project_root).resolve().as_posix()
         path_hash = hashlib.md5(abs_path.encode('utf-8')).hexdigest()
         return f"chunks_{path_hash}"
 
@@ -42,6 +42,7 @@ class VectorStore:
             pa.field("related_tests", pa.string()),  # JSON-encoded list
             pa.field("complexity", pa.int32()),
             pa.field("content", pa.string()),
+            pa.field("content_hash", pa.string()),
             pa.field("vector", pa.list_(pa.float32(), self.embedding_dims)),
         ])
 
@@ -81,6 +82,7 @@ class VectorStore:
                 "related_tests": json.dumps(chunk.related_tests) if chunk.related_tests else "[]",
                 "complexity": chunk.complexity or 0,
                 "content": chunk.content,
+                "content_hash": chunk.content_hash or "",
                 "vector": vector
             })
         
@@ -139,6 +141,35 @@ class VectorStore:
         
         table = self.db.open_table(table_name)
         return table.count_rows()
+
+    def get_project_hashes(self, project_root: str) -> dict:
+        """Returns a mapping of {filename: content_hash}."""
+        table_name = self._get_table_name(project_root)
+        if table_name not in self.db.table_names():
+            return {}
+        
+        table = self.db.open_table(table_name)
+        # We only need filename and content_hash
+        try:
+            # Check if column exists first (for legacy tables)
+            schema = table.schema
+            if "content_hash" not in schema.names:
+                return {}
+
+            data = table.search().select(["filename", "content_hash"]).to_arrow()
+            if len(data) == 0:
+                return {}
+            
+            # Map filename to content_hash using Arrow
+            filenames = data.column("filename").to_pylist()
+            hashes = data.column("content_hash").to_pylist()
+            
+            # We use a dict comprehension. If multiple chunks exist for one file, 
+            # the last one's hash is used (they should be identical).
+            return {f: h for f, h in zip(filenames, hashes) if h}
+        except Exception as e:
+            logger.warning(f"Failed to get project hashes: {e}")
+            return {}
 
     def get_detailed_stats(self, project_root: str) -> dict:
         """Returns detailed architectural statistics for a project."""

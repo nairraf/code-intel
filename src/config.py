@@ -40,7 +40,7 @@ except ValueError:
 SUPPORTED_EXTENSIONS: Set[str] = {
     ".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", 
     ".md", ".json", ".sql", ".go", ".rs", ".java", ".cpp", ".c", ".h",
-    ".yaml", ".yml", ".toml", ".dart"
+    ".yaml", ".yml", ".toml", ".dart", ".rules"
 }
 
 IGNORE_DIRS: Set[str] = {

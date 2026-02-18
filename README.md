@@ -15,14 +15,10 @@ Strict isolation for multiple concurrent projects:
 - **Zero Conflict**: Run multiple agents on different projects without write-lock contention.
 - **Unified Store**: All data lives centrally in `~/.code_intel_store/`, keeping your project repos clean.
 
-### 3. Smart AST Parsing & Deep Insights 🌳
-- **Semantic Chunking**: Uses Tree-sitter to intelligently extract functions and classes instead of blind text slicing.
-- **Architectural Insights (Deep Insights)**:
-    - **Dependency Hubs**: Identifies the "connectivity" of your project by tracking the most imported files.
-    - **Test Gap Analysis**: Correlates cyclomatic complexity with test presence to identify high-risk, unverified code.
-    - **Complexity Scoring**: Calculates Cyclomatic Complexity for all semantic chunks.
-    - **Test Mapping**: Bidirectionally links source files to their corresponding test files via path heuristics.
-- **Language Support**: Python, JS, TS, HTML, CSS, Go, Rust, Java, C++, Dart, SQL.
+- **Language Support**: Python, JS, TS, HTML, CSS, Go, Rust, Java, C++, Dart, SQL, **Firestore Rules**.
+- **Specialized Parsers**:
+    - **Firestore**: Extracts security rule `match` paths as searchable symbols.
+    - **Mermaid**: Extracts node labels from diagrams in Markdown to link docs to code.
 
 ### 4. Cross-File Symbol Intelligence 🧭
 - **Jump to Definition**: Precisely locate the source of any function, class, or variable across the entire project.
@@ -39,6 +35,11 @@ Strict isolation for multiple concurrent projects:
 ### 6. GPU-Ready Vector Search 🚀
 - **BGE-M3 (1024 dims)**: Uses the state-of-the-art embedding model via **Ollama**.
 - **LanceDB**: Local-first vector storage for sub-millisecond query performance.
+
+### 7. Performance & Incremental Indexing ⚡
+- **SHA-256 Hashing**: Content-based change detection ensures only modified files are processed.
+- **Incremental Mode**: Significantly reduces re-indexing time by skipping unchanged files.
+- **Cross-Platform Consistency**: Unified forward-slash path handling for reliable hashing on Windows.
 
 ---
 

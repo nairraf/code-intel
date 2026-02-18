@@ -17,10 +17,17 @@ class JSImportResolver(ImportResolver):
     EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.json']
     
     
-    def __init__(self):
+    def __init__(self, project_root: Optional[str] = None):
+        self.project_root = project_root
         self._config_cache: Dict[str, tuple] = {} # root_path -> (aliases, base_url)
     
-    def resolve(self, project_root: Path, source_file: str, import_string: str) -> Optional[str]:
+    def resolve(self, source_file: str, import_string: str, project_root: Optional[Path] = None) -> Optional[str]:
+        if project_root is None:
+            if self.project_root:
+                project_root = Path(self.project_root)
+            else:
+                return None
+                
         # 1. Handle Relative Imports
         if import_string.startswith('.'):
             return self._resolve_relative(source_file, import_string)

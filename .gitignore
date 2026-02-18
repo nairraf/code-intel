@@ -19,3 +19,4 @@ logs/
 
 # Logs
 *.log
+tmp_lancedb/
