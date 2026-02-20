@@ -25,6 +25,7 @@
 - [x] **Phase 3.4.5: Incremental Indexing Excellence** (File Hashing + Skip Logic).
 - [x] **Phase 3.4.6: Global Symbol Excellence** (Variable/Constant resolution).
 - [x] **Phase 3.5: Domain-Specific Intelligence** (Firestore Rules, Mermaid).
+- [x] **Scope Tuning:** Implemented `include` and `exclude` glob patterns for noise reduction.
 
 ### Upcoming
 - [ ] Advanced linking & discovery (Phase 3.6).

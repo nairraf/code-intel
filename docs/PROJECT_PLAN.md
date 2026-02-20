@@ -55,5 +55,6 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 
 ### Milestone 4: Deployment & DX
 - [x] **Verification:** Full suite verification (Rebuild, Search, Stats, Graph) passed on fresh install.
+- [x] **Scope Tuning:** Add `include` and `exclude` glob patterns to `search_code` and `refresh_index`.
 - [ ] One-click installers/packages.
 - [ ] Comprehensive CLI dashboard.
