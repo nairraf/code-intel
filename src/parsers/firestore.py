@@ -16,7 +16,7 @@ class FirestoreRulesParser:
             # Heuristic: Find 'match' statements and their subsequent blocks
             # We look for match /path/ { ... }
             # This is a simplified regex-based approach for the initial version
-            pattern = re.compile(r'(match\s+([^{]+)\s*\{)')
+            pattern = re.compile(r'(match\s+((?:[^\s{]|\{[^}]+\})+)\s*\{)')
             
             lines = content.splitlines()
             
@@ -28,14 +28,20 @@ class FirestoreRulesParser:
                 # Find matching closing brace
                 brace_count = 0
                 end_index = -1
-                for i in range(start_index, len(content)):
-                    if content[i] == '{':
-                        brace_count += 1
-                    elif content[i] == '}':
-                        brace_count -= 1
-                        if brace_count == 0:
-                            end_index = i + 1
-                            break
+                
+                # The regex captures the sequence up to and including the opening '{'
+                # So we must find where that '{' is to start counting BALANCED braces.
+                opening_brace_pos = match.end() - 1
+                
+                if content[opening_brace_pos] == '{':
+                    for i in range(opening_brace_pos, len(content)):
+                        if content[i] == '{':
+                            brace_count += 1
+                        elif content[i] == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                end_index = i + 1
+                                break
                 
                 if end_index != -1:
                     block_content = content[start_index:end_index]

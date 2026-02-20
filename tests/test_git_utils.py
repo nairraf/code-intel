@@ -3,6 +3,11 @@ import tempfile
 import subprocess
 import pytest
 from pathlib import Path
+import sys
+import os
+# Add project root to sys.path to allow importing src
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from src.git_utils import is_git_repo, get_file_git_info, batch_get_git_info
 
 @pytest.mark.asyncio
@@ -70,3 +75,39 @@ async def test_is_git_repo_timeout_no_fallback(mocker):
         
         # Should return False because no .git directory
         assert not await is_git_repo(tmpdir)
+@pytest.mark.asyncio
+async def test_get_active_branch():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        subprocess.run(["git", "init", "-b", "main"], cwd=tmpdir, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=tmpdir)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmpdir)
+        (Path(tmpdir) / "init").touch()
+        subprocess.run(["git", "add", "init"], cwd=tmpdir, check=True)
+        subprocess.run(["git", "commit", "-m", "initial"], cwd=tmpdir, check=True)
+        
+        from src.git_utils import get_active_branch
+        branch = await get_active_branch(tmpdir)
+        assert branch == "main"
+
+@pytest.mark.asyncio
+async def test_get_active_branch_unknown():
+    from src.git_utils import get_active_branch
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Not a git repo
+        branch = await get_active_branch(tmpdir)
+        assert branch == "unknown"
+
+@pytest.mark.asyncio
+async def test_batch_get_git_info_repo():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=tmpdir)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmpdir)
+        
+        test_file = Path(tmpdir) / "test.py"
+        test_file.write_text("print('hi')\n")
+        subprocess.run(["git", "add", "test.py"], cwd=tmpdir, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "msg"], cwd=tmpdir, check=True, capture_output=True)
+        
+        results = await batch_get_git_info([str(test_file)], tmpdir)
+        assert results[str(test_file)]["author"] == "Test"

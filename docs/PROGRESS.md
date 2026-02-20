@@ -28,3 +28,8 @@
 
 ### Upcoming
 - [ ] Cross-file symbol resolution refinements.
+
+### Verification Status
+- [x] **Full Rebuild & Tool Test:** Verified `search_code`, `get_stats`, `find_definition`, `find_references` on fresh index. All passed.
+- [x] **Hardened Testing:** Implemented real DB tests for `VectorStore` and full integration tests. Coverage gaps reduced.
+- [x] **80% Coverage Target:** Successfully reached 80% total project coverage across all core modules.

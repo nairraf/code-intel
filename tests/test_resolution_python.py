@@ -112,3 +112,23 @@ def test_resolve_external_import_returns_none(mock_project):
         import_string="os"
     )
     assert resolved is None
+
+def test_resolve_invalid_submodule(mock_project):
+    resolver = PythonImportResolver(str(mock_project))
+    
+    # import src.core.missing
+    resolved = resolver.resolve(
+        source_file=str(mock_project / "src" / "main.py"),
+        import_string="src.core.missing"
+    )
+    assert resolved is None
+
+def test_resolve_file_as_package_invalid(mock_project):
+    resolver = PythonImportResolver(str(mock_project))
+    
+    # import src.utils.something (utils.py is a file, not a package)
+    resolved = resolver.resolve(
+        source_file=str(mock_project / "src" / "main.py"),
+        import_string="src.utils.something"
+    )
+    assert resolved is None

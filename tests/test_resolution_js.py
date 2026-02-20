@@ -84,3 +84,22 @@ def test_resolve_node_modules_ignored(mock_js_project):
     
     resolved = resolver.resolve(source, "react")
     assert resolved is None
+
+def test_resolve_invalid_alias_path(mock_js_project):
+    resolver = JSImportResolver(str(mock_js_project))
+    source = str(mock_js_project / "src" / "utils" / "helpers.ts")
+    
+    # @/components/Missing -> should fail
+    resolved = resolver.resolve(source, "@/components/Missing")
+    assert resolved is None
+
+def test_resolve_directory_without_index(mock_js_project):
+    # Setup a directory without index
+    (mock_js_project / "src" / "utils" / "empty_dir").mkdir()
+    
+    resolver = JSImportResolver(str(mock_js_project))
+    source = str(mock_js_project / "src" / "index.ts")
+    
+    # ./utils/empty_dir -> fails if no index inside
+    resolved = resolver.resolve(source, "./utils/empty_dir")
+    assert resolved is None

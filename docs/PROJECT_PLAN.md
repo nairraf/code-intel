@@ -54,5 +54,6 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 - [ ] Real-time indexing on file change.
 
 ### Milestone 4: Deployment & DX
+- [x] **Verification:** Full suite verification (Rebuild, Search, Stats, Graph) passed on fresh install.
 - [ ] One-click installers/packages.
 - [ ] Comprehensive CLI dashboard.
