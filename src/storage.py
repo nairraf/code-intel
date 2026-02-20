@@ -6,6 +6,7 @@ from typing import List, Optional
 from pathlib import Path
 from .config import LANCEDB_URI, TABLE_NAME, EMBEDDING_DIMENSIONS
 from .models import CodeChunk
+from .utils import normalize_path
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +19,8 @@ class VectorStore:
 
     def _get_table_name(self, project_root: str) -> str:
         """Generates a stable, unique table name for a given project root."""
-        abs_path = Path(project_root).resolve().as_posix()
-        path_hash = hashlib.md5(abs_path.encode('utf-8')).hexdigest()
+        normalized_root = normalize_path(project_root)
+        path_hash = hashlib.md5(normalized_root.encode('utf-8')).hexdigest()
         return f"chunks_{path_hash}"
 
     def _get_schema(self):
@@ -126,9 +127,9 @@ class VectorStore:
                 return []
             
             table = self.db.open_table(table_name)
-            safe_path = filepath.replace('"', '""')
+            safe_filepath = normalize_path(filepath).replace('"', '""')
             
-            results = table.search().where(f'symbol_name = "{symbol_name}" AND filename = "{safe_path}"').to_list()
+            results = table.search().where(f'symbol_name = "{symbol_name}" AND filename = "{safe_filepath}"').to_list()
             return results
         except Exception as e:
             # logger.error(f"Error querying symbol in file: {e}")

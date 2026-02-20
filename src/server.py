@@ -24,6 +24,7 @@ from .storage import VectorStore
 from .git_utils import batch_get_git_info
 from .knowledge_graph import KnowledgeGraph
 from .linker import SymbolLinker
+from .utils import normalize_path
 
 # Configure logging to file
 logging.basicConfig(
@@ -61,10 +62,10 @@ def _hash_file(filepath: str) -> str:
         return ""
 
 async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False) -> str:
-    root = Path(root_path).resolve()
+    project_root_str = normalize_path(root_path)
+    root = Path(project_root_str)
     if not root.exists():
         return f"Error: Path {root} does not exist."
-    project_root_str = root.as_posix()
 
     if force_full_scan:
         vector_store.clear_project(project_root_str)
@@ -84,7 +85,7 @@ async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False
             if f.startswith("."): continue
             file_path = Path(dirpath) / f
             if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
-                file_str = file_path.resolve().as_posix()
+                file_str = normalize_path(str(file_path))
                 current_hash = _hash_file(file_str)
                 
                 stored_hash = existing_hashes.get(file_str)
@@ -199,10 +200,10 @@ def _should_process_file(filepath: str, project_root: str, include: Optional[str
     return True
 
 async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False, include: str = None, exclude: str = None) -> str:
-    root = Path(root_path).resolve()
+    project_root_str = normalize_path(root_path)
+    root = Path(project_root_str)
     if not root.exists():
         return f"Error: Path {root} does not exist."
-    project_root_str = root.as_posix()
 
     if force_full_scan:
         vector_store.clear_project(project_root_str)
@@ -222,7 +223,7 @@ async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False
             if f.startswith("."): continue
             file_path = Path(dirpath) / f
             if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
-                file_str = file_path.resolve().as_posix()
+                file_str = normalize_path(str(file_path))
                 
                 # Check Scope Tuning (Include/Exclude)
                 if not _should_process_file(file_str, project_root_str, include, exclude):
@@ -474,8 +475,8 @@ async def find_definition(filename: str, line: int, symbol_name: Optional[str] =
 
 async def _find_definition(filename: str, line: int, symbol_name: Optional[str] = None, root_path: str = ".") -> str:
     try:
-        project_root = str(Path(root_path).resolve())
-        filepath = str(Path(filename).resolve())
+        project_root = normalize_path(root_path)
+        filepath = normalize_path(filename)
         
         # 1. First, try AST-based origin resolution via the Knowledge Graph
         try:
@@ -577,7 +578,7 @@ async def find_references(symbol_name: str, root_path: str = ".") -> str:
 
 async def _find_references(symbol_name: str, root_path: str = ".") -> str:
     try:
-        project_root = str(Path(root_path).resolve())
+        project_root = normalize_path(root_path)
         # 1. Find the chunk(s) defining the symbol
         def_chunks = vector_store.find_chunks_by_symbol(project_root, symbol_name)
         if not def_chunks:

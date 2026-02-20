@@ -21,6 +21,7 @@ from tree_sitter import Language, Parser, Node, Query, QueryCursor
 
 from .models import CodeChunk, SymbolUsage
 from .config import SUPPORTED_EXTENSIONS
+from .utils import normalize_path
 from .parsers.firestore import FirestoreRulesParser
 
 class CodeParser:
@@ -84,6 +85,10 @@ class CodeParser:
 
     def parse_file(self, filepath: str, project_root: Optional[str] = None) -> List[CodeChunk]:
         """Parses a file and returns semantic chunks."""
+        filepath = normalize_path(filepath)
+        if project_root:
+            project_root = normalize_path(project_root)
+        
         ext = Path(filepath).suffix.lower()
         if ext not in getattr(self, 'ext_map', {}):
             return self._fallback_parse(filepath)

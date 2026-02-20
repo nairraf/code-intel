@@ -7,6 +7,7 @@ from .resolution.python import PythonImportResolver
 from .resolution.javascript import JSImportResolver
 from .resolution.dart import DartImportResolver
 from .storage import VectorStore
+from .utils import normalize_path
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class SymbolLinker:
 
         lang = chunk.language
         resolver = self.resolvers.get(lang)
-        project_root_path = Path(project_root)
+        project_root_path = Path(normalize_path(project_root))
         
         # Pre-fetch potentially relevant symbols to minimize DB hits? 
         # No, for now let's query per usage as premature optimization might be complex.
@@ -55,7 +56,7 @@ class SymbolLinker:
                     
                     if resolved_path:
                         # Normalize to absolute POSIX for DB matching
-                        resolved_path = Path(resolved_path).resolve().as_posix()
+                        resolved_path = normalize_path(resolved_path)
                         
                         # Check if the symbol exists in that file
                         matches = self.vector_store.find_chunks_by_symbol_in_file(
