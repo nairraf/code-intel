@@ -1,6 +1,6 @@
 [project]
 name = "code-intel"
-version = "3.0.0"
+version = "3.1.0"
 description = "Lightweight Code Intelligence MCP Server — tree-sitter AST maps + embedding-only RAG"
 readme = "README.md"
 requires-python = ">=3.11"
