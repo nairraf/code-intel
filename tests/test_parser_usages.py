@@ -40,6 +40,27 @@ def helper():
     assert "helper" in usage_names
     assert "do_something" in usage_names
 
+def test_extract_python_middleware_usages(parser, tmp_path):
+    code = """
+from fastapi import Depends
+
+@verify_token
+@app.get("/users")
+def get_users(db = Depends(get_db_session)):
+    pass
+"""
+    f = tmp_path / "test_middleware.py"
+    f.write_text(code, encoding="utf-8")
+    
+    chunks = parser.parse_file(str(f))
+    users_chunk = next(c for c in chunks if c.symbol_name == "get_users")
+    
+    usage_names = [u.name for u in users_chunk.usages]
+    assert "verify_token" in usage_names
+    assert "get" in usage_names  # app.get -> get
+    assert "Depends" in usage_names
+    assert "get_db_session" in usage_names
+
 def test_extract_js_usages(parser, tmp_path):
     code = """
 function main() {
@@ -66,6 +87,7 @@ function main() {
 def test_extract_dart_usages(parser, tmp_path):
     code = """
 class Processor {
+  @override
   void process() {
     print('Processing');
     var data = fetchData();

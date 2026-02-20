@@ -1,6 +1,28 @@
 import pytest
+import os
+import sys
 from pathlib import Path
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from src.parser import CodeParser
+
+def test_mermaid_extraction(tmp_path):
+    parser = CodeParser()
+    code = """
+Some markdown
+```mermaid
+graph TD;
+    A[Start Node] --> B(End Node);
+```
+    """
+    f = tmp_path / "test.md"
+    f.write_text(code, encoding="utf-8")
+    chunks = parser._extract_mermaid_chunks(code, str(f))
+    # there should be blocks for Start Node and End Node
+    assert len(chunks) >= 2
+    assert any(c.type == "mermaid_node" and c.symbol_name == "A" for c in chunks)
+    assert any(c.type == "mermaid_node" and c.symbol_name == "B" for c in chunks)
 
 def test_python_parsing():
     parser = CodeParser()

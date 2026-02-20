@@ -3,6 +3,7 @@ import sys
 import builtins
 import os
 import hashlib
+import re
 from typing import List, Dict, Optional, Any
 from pathlib import Path
 import tree_sitter_python
@@ -201,6 +202,11 @@ class CodeParser:
                 if sib and sib.type == 'function_body':
                     end_byte = sib.end_byte
                     usage_node = sib
+            
+            # --- Python Special Handling ---
+            if lang == 'python' and node.parent and node.parent.type == 'decorated_definition':
+                usage_node = node.parent
+            
             text = content.encode('utf-8')[start_byte:end_byte].decode('utf-8', errors='replace')
             meta = self._extract_node_metadata(node, lang, content)
             usages = self._extract_usages(usage_node, lang)
@@ -469,6 +475,11 @@ class CodeParser:
             "python": """
                 (call function: (identifier) @name)
                 (call function: (attribute attribute: (identifier) @name))
+                (decorator (identifier) @name)
+                (decorator (attribute attribute: (identifier) @name))
+                (decorator (call function: (identifier) @name))
+                (decorator (call function: (attribute attribute: (identifier) @name)))
+                (call arguments: (argument_list (identifier) @name))
             """,
             "javascript": """
                 (call_expression function: (identifier) @name)
@@ -488,8 +499,8 @@ class CodeParser:
                 (jsx_self_closing_element name: (identifier) @name)
             """,
             "dart": """
-                (identifier) @name
-                (type_identifier) @name
+                (annotation name: (identifier) @name)
+                ((identifier) @name . (selector))
             """
         }
         
