@@ -1,0 +1,7 @@
+$77119a4f-303d-4bd2-9111-08dbe040cf25²­id ÿÿÿÿÿÿÿÿÿ*string08#filename ÿÿÿÿÿÿÿÿÿ*string08$
+start_line ÿÿÿÿÿÿÿÿÿ*int3208"end_line ÿÿÿÿÿÿÿÿÿ*int3208type ÿÿÿÿÿÿÿÿÿ*string08#language ÿÿÿÿÿÿÿÿÿ*string08&symbol_name ÿÿÿÿÿÿÿÿÿ*string08(parent_symbol ÿÿÿÿÿÿÿÿÿ*string08$	signature ÿÿÿÿÿÿÿÿÿ*string08$	docstring	 ÿÿÿÿÿÿÿÿÿ*string08%
+decorators
+ ÿÿÿÿÿÿÿÿÿ*string08(last_modified ÿÿÿÿÿÿÿÿÿ*string08!author ÿÿÿÿÿÿÿÿÿ*string08'dependencies ÿÿÿÿÿÿÿÿÿ*string08(related_tests ÿÿÿÿÿÿÿÿÿ*string08$
+complexity ÿÿÿÿÿÿÿÿÿ*int3208"content ÿÿÿÿÿÿÿÿÿ*string08'content_hash ÿÿÿÿÿÿÿÿÿ*string085vector ÿÿÿÿÿÿÿÿÿ*fixed_size_list:float:102408"!
+lance.auto_cleanup.interval20"'
+lance.auto_cleanup.older_than14days

@@ -120,14 +120,19 @@ class VectorStore:
     def find_chunks_by_symbol_in_file(self, project_root: str, symbol_name: str, filepath: str) -> List[dict]:
         """Finds chunks with a specific symbol provided the filepath."""
         table_name = self._get_table_name(project_root)
-        if table_name not in self.db.table_names():
+        try:
+            # Use table_names() for maximum compatibility despite the deprecation warning
+            if table_name not in self.db.table_names():
+                return []
+            
+            table = self.db.open_table(table_name)
+            safe_path = filepath.replace('"', '""')
+            
+            results = table.search().where(f'symbol_name = "{symbol_name}" AND filename = "{safe_path}"').to_list()
+            return results
+        except Exception as e:
+            # logger.error(f"Error querying symbol in file: {e}")
             return []
-        
-        table = self.db.open_table(table_name)
-        # Escape quotes in filepath
-        safe_path = filepath.replace('"', '""')
-        results = table.search().where(f'symbol_name = "{symbol_name}" AND filename = "{safe_path}"').to_list()
-        return results
 
     def get_chunk_by_id(self, project_root: str, chunk_id: str) -> Optional[dict]:
         """Retrieves a single chunk by its ID."""

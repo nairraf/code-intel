@@ -85,3 +85,30 @@ def test_cache_prune(temp_cache, mocker):
     
     assert temp_cache.get(text_old, model) is None
     assert temp_cache.get(text_new, model) == [0.2]
+
+def test_cache_init_error(mocker, tmp_path):
+    # Mock sqlite3.connect to raise an error during init
+    mocker.patch("sqlite3.connect", side_effect=sqlite3.Error("Connection Failed"))
+    
+    # Mock the logger
+    mock_logger = mocker.patch("src.cache.logger")
+    
+    # EmbeddingCache calls _init_db in __init__
+    EmbeddingCache(db_path=str(tmp_path / "error.db"))
+    assert mock_logger.error.called
+    assert "Failed to initialize" in mock_logger.error.call_args[0][0]
+
+def test_cache_set_error(temp_cache, mocker):
+    mocker.patch("sqlite3.connect", side_effect=sqlite3.Error("Write Failed"))
+    mock_logger = mocker.patch("src.cache.logger")
+    temp_cache.set("text", "model", [0.1])
+    assert mock_logger.error.called
+    assert "Cache write failed" in mock_logger.error.call_args[0][0]
+
+def test_cache_get_error(temp_cache, mocker):
+    mocker.patch("sqlite3.connect", side_effect=sqlite3.Error("Read Failed"))
+    mock_logger = mocker.patch("src.cache.logger")
+    res = temp_cache.get("text", "model")
+    assert res is None
+    assert mock_logger.warning.called
+    assert "Cache read failed" in mock_logger.warning.call_args[0][0]

@@ -132,3 +132,29 @@ def test_resolve_file_as_package_invalid(mock_project):
         import_string="src.utils.something"
     )
     assert resolved is None
+
+def test_resolve_relative_empty_name(mock_project):
+    resolver = PythonImportResolver(str(mock_project))
+    
+    # from . import * (in src/main.py)
+    # import_string is '.'
+    resolved = resolver.resolve(
+        source_file=str(mock_project / "src" / "main.py"),
+        import_string="."
+    )
+    # Resolves to src/__init__.py
+    assert resolved == str(mock_project / "src" / "__init__.py")
+
+def test_deep_relative_import_above_root(mock_project):
+    resolver = PythonImportResolver(str(mock_project))
+    
+    # from ...something import x  (in src/main.py)
+    # level=3. base_dir starts at src/.
+    # Loop 1 (3-1=2 times): base_dir = project/
+    # Loop 2: base_dir = project_parent/
+    # This might return a path outside project_root, but resolver should eventually fail if file doesn't exist.
+    resolved = resolver.resolve(
+        source_file=str(mock_project / "src" / "main.py"),
+        import_string="...something"
+    )
+    assert resolved is None

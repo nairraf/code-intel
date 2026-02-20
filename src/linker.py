@@ -54,11 +54,10 @@ class SymbolLinker:
                     resolved_path = resolver.resolve(chunk.filename, dep, project_root=project_root_path)
                     
                     if resolved_path:
-                        # Normalize to POSIX for DB matching
-                        resolved_path = Path(resolved_path).as_posix()
+                        # Normalize to absolute POSIX for DB matching
+                        resolved_path = Path(resolved_path).resolve().as_posix()
                         
                         # Check if the symbol exists in that file
-                        # We need to query vector_store for "Symbol" in "resolved_path"
                         matches = self.vector_store.find_chunks_by_symbol_in_file(
                             project_root, 
                             usage.name, 

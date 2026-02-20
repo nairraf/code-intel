@@ -1,4 +1,4 @@
 # Agent State
-Current Phase: [DEV]
-Status: [COMPLETE]
+Current Phase: [SENIOR]
+Status: [FIXING_REGRESSIONS]
 Objective: Update tool documentation and refactor find_definition to use AST/Knowledge Graph for accurate origin resolution.
