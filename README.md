@@ -60,24 +60,21 @@ The server requires **Ollama** to handle local embeddings.
         source .venv/bin/activate  # On Windows: .venv\Scripts\activate
         pip install -e .
         ```
-        pip install -e .
-        ```
-63: 4.  **Run the MCP Server**: The MCP server will automatically connect to Ollama and begin indexing your project. See MCP Configuration for more information.
-64: 
-65: ## 🔎 Scope Tuning (New!)
-66: 
-67: Reduce noise by filtering what gets indexed and searched. Code-Intel supports standard glob patterns for inclusions and exclusions.
-68: 
-69: ### Code Navigation
-70: - **`search_code(query, include, exclude)`**: Semantic search with regex/glob filtering.
-71:   - *Example*: `search_code("auth", exclude="tests/**")`
-72: - **`refresh_index(include, exclude)`**: Target specific directories or exclude legacy code during re-indexing.
-73:   - *Example*: `refresh_index(include="src/api/**")`
-74: 
-75: ### Default Ignores
-76: System directories like `node_modules`, `.git`, `venv`, and `__pycache__` are always excluded by default.
-77: 
-78: ### MCP Configuration
+4.  **Run the MCP Server**: The MCP server will automatically connect to Ollama and begin indexing your project. See MCP Configuration for more information.
+
+## 🔎 Scope Tuning (New!)
+
+Reduce noise by filtering what gets indexed and searched. Code-Intel supports standard glob patterns for inclusions and exclusions.
+
+### Code Navigation
+- **`search_code(query, include, exclude)`**: Semantic search with regex/glob filtering.
+  - *Example*: `search_code("auth", exclude="tests/**")`
+- **`refresh_index(include, exclude)`**: Target specific directories or exclude legacy code during re-indexing.
+  - *Example*: `refresh_index(include="src/api/**")`
+
+### Default Ignores
+System directories like `node_modules`, `.git`, `venv`, and `__pycache__` are always excluded by default.
+
 
 Add the following to your MCP settings. Replace `/path/to/code-intel` with the actual absolute path to this project on your machine.
 
