@@ -1,5 +1,5 @@
 [project]
-name = "agentic-env"
+name = "code-intel"
 version = "3.0.0"
 description = "Lightweight Code Intelligence MCP Server — tree-sitter AST maps + embedding-only RAG"
 readme = "README.md"

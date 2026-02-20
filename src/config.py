@@ -46,7 +46,8 @@ SUPPORTED_EXTENSIONS: Set[str] = {
 IGNORE_DIRS: Set[str] = {
     "node_modules", "venv", ".venv", "env", ".env", "__pycache__", ".git", 
     "build", "dist", ".idea", ".vscode", "coverage", ".pytest_cache",
-    ".cognee_vault", "logs", ".dart_tool", "ephemeral"
+    ".cognee_vault", "logs", ".dart_tool", "ephemeral",
+    "__pypackages__"
 }
 
 # --- Database Configuration ---

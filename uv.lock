@@ -9,77 +9,6 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "agentic-env"
-version = "3.0.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "duckdb" },
-    { name = "fastmcp" },
-    { name = "httpx" },
-    { name = "lancedb" },
-    { name = "pyarrow" },
-    { name = "python-dotenv" },
-    { name = "tree-sitter" },
-    { name = "tree-sitter-cpp" },
-    { name = "tree-sitter-css" },
-    { name = "tree-sitter-go" },
-    { name = "tree-sitter-html" },
-    { name = "tree-sitter-java" },
-    { name = "tree-sitter-javascript" },
-    { name = "tree-sitter-json" },
-    { name = "tree-sitter-language-pack" },
-    { name = "tree-sitter-languages" },
-    { name = "tree-sitter-markdown" },
-    { name = "tree-sitter-python" },
-    { name = "tree-sitter-rust" },
-    { name = "tree-sitter-sql" },
-    { name = "tree-sitter-typescript" },
-    { name = "tree-sitter-yaml" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "pytest-mock" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "duckdb", specifier = ">=1.1.0" },
-    { name = "fastmcp", specifier = ">=2.14.4" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "lancedb", specifier = ">=0.17.0" },
-    { name = "pyarrow", specifier = ">=18.0.0" },
-    { name = "python-dotenv", specifier = ">=1.2.1" },
-    { name = "tree-sitter", specifier = ">=0.24.0" },
-    { name = "tree-sitter-cpp", specifier = ">=0.23.0" },
-    { name = "tree-sitter-css", specifier = ">=0.23.0" },
-    { name = "tree-sitter-go", specifier = ">=0.23.0" },
-    { name = "tree-sitter-html", specifier = ">=0.23.0" },
-    { name = "tree-sitter-java", specifier = ">=0.23.0" },
-    { name = "tree-sitter-javascript", specifier = ">=0.23.0" },
-    { name = "tree-sitter-json", specifier = ">=0.24.0" },
-    { name = "tree-sitter-language-pack", specifier = ">=0.13.0" },
-    { name = "tree-sitter-languages", specifier = ">=1.10.2" },
-    { name = "tree-sitter-markdown", specifier = ">=0.4.0" },
-    { name = "tree-sitter-python", specifier = ">=0.23.0" },
-    { name = "tree-sitter-rust", specifier = ">=0.23.0" },
-    { name = "tree-sitter-sql", specifier = ">=0.3.0" },
-    { name = "tree-sitter-typescript", specifier = ">=0.23.0" },
-    { name = "tree-sitter-yaml", specifier = ">=0.7.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8.0" },
-    { name = "pytest-asyncio", specifier = ">=0.25.0" },
-    { name = "pytest-cov", specifier = ">=7.0.0" },
-    { name = "pytest-mock", specifier = ">=3.15.1" },
-]
-
-[[package]]
 name = "annotated-types"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -329,6 +258,77 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/27/fb/576f067976d320f5f0114a8d9fa1215425441bb35627b1993e5afd8111e5/cloudpickle-3.1.2.tar.gz", hash = "sha256:7fda9eb655c9c230dab534f1983763de5835249750e85fbcef43aaa30a9a2414", size = 22330, upload-time = "2025-11-03T09:25:26.604Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/88/39/799be3f2f0f38cc727ee3b4f1445fe6d5e4133064ec2e4115069418a5bb6/cloudpickle-3.1.2-py3-none-any.whl", hash = "sha256:9acb47f6afd73f60dc1df93bb801b472f05ff42fa6c84167d25cb206be1fbf4a", size = 22228, upload-time = "2025-11-03T09:25:25.534Z" },
+]
+
+[[package]]
+name = "code-intel"
+version = "3.0.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "duckdb" },
+    { name = "fastmcp" },
+    { name = "httpx" },
+    { name = "lancedb" },
+    { name = "pyarrow" },
+    { name = "python-dotenv" },
+    { name = "tree-sitter" },
+    { name = "tree-sitter-cpp" },
+    { name = "tree-sitter-css" },
+    { name = "tree-sitter-go" },
+    { name = "tree-sitter-html" },
+    { name = "tree-sitter-java" },
+    { name = "tree-sitter-javascript" },
+    { name = "tree-sitter-json" },
+    { name = "tree-sitter-language-pack" },
+    { name = "tree-sitter-languages" },
+    { name = "tree-sitter-markdown" },
+    { name = "tree-sitter-python" },
+    { name = "tree-sitter-rust" },
+    { name = "tree-sitter-sql" },
+    { name = "tree-sitter-typescript" },
+    { name = "tree-sitter-yaml" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "pytest-mock" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "duckdb", specifier = ">=1.1.0" },
+    { name = "fastmcp", specifier = ">=2.14.4" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "lancedb", specifier = ">=0.17.0" },
+    { name = "pyarrow", specifier = ">=18.0.0" },
+    { name = "python-dotenv", specifier = ">=1.2.1" },
+    { name = "tree-sitter", specifier = ">=0.24.0" },
+    { name = "tree-sitter-cpp", specifier = ">=0.23.0" },
+    { name = "tree-sitter-css", specifier = ">=0.23.0" },
+    { name = "tree-sitter-go", specifier = ">=0.23.0" },
+    { name = "tree-sitter-html", specifier = ">=0.23.0" },
+    { name = "tree-sitter-java", specifier = ">=0.23.0" },
+    { name = "tree-sitter-javascript", specifier = ">=0.23.0" },
+    { name = "tree-sitter-json", specifier = ">=0.24.0" },
+    { name = "tree-sitter-language-pack", specifier = ">=0.13.0" },
+    { name = "tree-sitter-languages", specifier = ">=1.10.2" },
+    { name = "tree-sitter-markdown", specifier = ">=0.4.0" },
+    { name = "tree-sitter-python", specifier = ">=0.23.0" },
+    { name = "tree-sitter-rust", specifier = ">=0.23.0" },
+    { name = "tree-sitter-sql", specifier = ">=0.3.0" },
+    { name = "tree-sitter-typescript", specifier = ">=0.23.0" },
+    { name = "tree-sitter-yaml", specifier = ">=0.7.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest-asyncio", specifier = ">=0.25.0" },
+    { name = "pytest-cov", specifier = ">=7.0.0" },
+    { name = "pytest-mock", specifier = ">=3.15.1" },
 ]
 
 [[package]]
