@@ -390,7 +390,7 @@ async def search_code(query: str, root_path: str = ".", limit: int = 10, include
     - Locating similar implementations across the codebase.
     - Navigating unfamiliar projects where specific symbol names aren't known.
     
-    The results include 'Project Pulse' metadata (Git author, complexity, dependencies).
+    The results will include chunk-level author, modification date, and complexity metadata. Note: for broader architectural project pulse tracking, utilize the `get_stats` tool.
     
     Args:
         query: Natural language description of what you are looking for.
@@ -462,9 +462,11 @@ async def find_definition(filename: str, line: int, symbol_name: Optional[str] =
     - Understanding the exact implementation details of a specific component.
     - Resolving imports across multiple files.
     
+    Note: For dynamic dependency injection or highly nested python decorators, fallback literal searches via `grep_search` may be required if Knowledge Graph mapping fails.
+    
     Args:
         filename: The file where the symbol is being used.
-        line: The line number of the usage.
+        line: The line number of the usage (must be exactly on the line where the symbol is referenced/called).
         symbol_name: The exact name of the function, class, or variable to find.
         root_path: Project root for context.
     """
@@ -473,6 +475,46 @@ async def find_definition(filename: str, line: int, symbol_name: Optional[str] =
 async def _find_definition(filename: str, line: int, symbol_name: Optional[str] = None, root_path: str = ".") -> str:
     try:
         project_root = str(Path(root_path).resolve())
+        filepath = str(Path(filename).resolve())
+        
+        # 1. First, try AST-based origin resolution via the Knowledge Graph
+        try:
+            # Parse the file on the fly to get deterministic chunks and usages
+            chunks = parser.parse_file(filepath, project_root=project_root)
+            
+            target_chunk = None
+            target_usage = None
+            
+            for chunk in chunks:
+                # Are we already at the definition?
+                if chunk.start_line <= line <= chunk.end_line:
+                    if symbol_name and chunk.symbol_name == symbol_name:
+                        return f"File: {chunk.filename} ({chunk.start_line}-{chunk.end_line})\nContent:\n```\n{chunk.content}\n```"
+                
+                # Check for usages on this line
+                for usage in chunk.usages:
+                    if usage.line == line:
+                        if symbol_name is None or usage.name == symbol_name:
+                            target_chunk = chunk
+                            target_usage = usage
+                            break
+                if target_chunk:
+                    break
+                    
+            if target_chunk and target_usage:
+                # Query knowledge graph for outgoing edges from this specific chunk
+                edges = knowledge_graph.get_edges(source_id=target_chunk.id, type="call")
+                
+                for _, target_id, _, meta in edges:
+                    # Match the exact usage line to find the correct origin tracking link
+                    if meta.get("line") == target_usage.line:
+                        def_chunk = vector_store.get_chunk_by_id(project_root, target_id)
+                        if def_chunk:
+                            return f"File: {def_chunk['filename']} ({def_chunk['start_line']}-{def_chunk['end_line']})\nContent:\n```\n{def_chunk['content']}\n```"
+        except Exception as e:
+            logger.error(f"AST-based definition resolution failed: {e}")
+            
+        # 2. Fallback to global symbol search if AST mapping failed or wasn't found
         if symbol_name:
             targets = vector_store.find_chunks_by_symbol(project_root, symbol_name)
             if not targets:
@@ -483,7 +525,7 @@ async def _find_definition(filename: str, line: int, symbol_name: Optional[str] 
                 output.append(f"File: {t['filename']} ({t['start_line']}-{t['end_line']})\nContent:\n```\n{t['content']}\n```")
             return "\n---\n".join(output)
         
-        return "Please provide a symbol_name to find its definition."
+        return "Please provide a symbol_name to find its definition if line-based AST mapping fails."
     except Exception as e:
         return f"Error finding definition: {e}"
 
@@ -495,7 +537,9 @@ async def find_references(symbol_name: str, root_path: str = ".") -> str:
     BEST FOR:
     - Assessing the impact of a refactor or breaking change.
     - Finding examples of how a utility function is utilized in real scenarios.
-    - Understanding the dependency reach of a specific module.
+    - Tracking middleware dependencies (e.g. FastAPI `Depends()`, standard decorators).
+    
+    Note: Tracking dynamic middleware injection requires that `refresh_index` with `force_full_scan=True` is run on the workspace.
     
     Args:
         symbol_name: The exact name of the symbol to track references for.

@@ -1,4 +1,4 @@
 # Agent State
 Current Phase: [DEV]
 Status: [COMPLETE]
-Objective: Enhance AST parsing for middleware functions in Python and Dart to improve `find_references` and `find_definition` reliability.
+Objective: Update tool documentation and refactor find_definition to use AST/Knowledge Graph for accurate origin resolution.
