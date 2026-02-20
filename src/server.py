@@ -505,12 +505,22 @@ async def _find_definition(filename: str, line: int, symbol_name: Optional[str] 
                 # Query knowledge graph for outgoing edges from this specific chunk
                 edges = knowledge_graph.get_edges(source_id=target_chunk.id, type="call")
                 
-                for _, target_id, _, meta in edges:
-                    # Match the exact usage line to find the correct origin tracking link
+                target_edge = None
+                for edge in edges:
+                    _, target_id, _, meta = edge
+                    # Primary check: Exact line match
                     if meta.get("line") == target_usage.line:
-                        def_chunk = vector_store.get_chunk_by_id(project_root, target_id)
-                        if def_chunk:
-                            return f"File: {def_chunk['filename']} ({def_chunk['start_line']}-{def_chunk['end_line']})\nContent:\n```\n{def_chunk['content']}\n```"
+                        target_edge = edge
+                        break
+                    # Secondary fallback: Character match or just the first edge if it's the only one
+                    elif meta.get("match_type") == "name_match" or len(edges) == 1:
+                        target_edge = edge
+                
+                if target_edge:
+                    _, target_id, _, _ = target_edge
+                    def_chunk = vector_store.get_chunk_by_id(project_root, target_id)
+                    if def_chunk:
+                        return f"File: {def_chunk['filename']} ({def_chunk['start_line']}-{def_chunk['end_line']})\nContent:\n```\n{def_chunk['content']}\n```"
         except Exception as e:
             logger.error(f"AST-based definition resolution failed: {e}")
             
