@@ -27,9 +27,10 @@
 - [x] **Phase 3.5: Domain-Specific Intelligence** (Firestore Rules, Mermaid).
 
 ### Upcoming
-- [ ] Cross-file symbol resolution refinements.
+- [ ] Advanced linking & discovery (Phase 3.6).
 
 ### Verification Status
 - [x] **Full Rebuild & Tool Test:** Verified `search_code`, `get_stats`, `find_definition`, `find_references` on fresh index. All passed.
 - [x] **Hardened Testing:** Implemented real DB tests for `VectorStore` and full integration tests. Coverage gaps reduced.
 - [x] **80% Coverage Target:** Successfully reached 80% total project coverage across all core modules.
+- [x] **Bug Fix:** Resolved race condition in symbol linking via two-pass indexing.

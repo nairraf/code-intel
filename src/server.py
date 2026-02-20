@@ -107,10 +107,12 @@ async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False
         )
 
     # Process only files that changed
+    # Process only files that changed
     just_filepaths = [f[0] for f in files_to_process]
     git_info = await batch_get_git_info(just_filepaths, project_root_str)
 
-    async def process_file(filepath: str, file_hash: str):
+    # --- PASS 1: Index Definitions & Embeddings ---
+    async def process_file_pass1(filepath: str, file_hash: str):
         try:
             chunks = parser.parse_file(filepath, project_root=project_root_str)
             if not chunks: return 0
@@ -119,26 +121,56 @@ async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False
                 chunk.author = file_git.get("author")
                 chunk.last_modified = file_git.get("last_modified")
                 chunk.content_hash = file_hash
+            
+            # Embeddings
             texts = [f"{c.language} {c.type} {c.symbol_name}: {c.content}" for c in chunks]
             embeddings = await ollama_client.get_embeddings_batch(texts, semaphore=INFERENCE_SEMAPHORE)
+            
             if embeddings:
                 vector_store.upsert_chunks(project_root_str, chunks, embeddings)
-                # Link usages to definitions
-                for chunk in chunks:
-                    linker.link_chunk_usages(project_root_str, chunk)
+            
             return len(chunks)
         except Exception as e:
-            logger.error(f"Failed to process {filepath}: {e}")
+            logger.error(f"Pass 1 (Indexing) failed for {filepath}: {e}")
             return 0
 
-    async def process_file_bounded(file_data):
+    async def process_file_bounded_pass1(file_data):
         filepath, file_hash = file_data
         async with FILE_PROCESSING_SEMAPHORE:
-            return await process_file(filepath, file_hash)
+            return await process_file_pass1(filepath, file_hash)
 
-    tasks = [process_file_bounded(fd) for fd in files_to_process]
-    results = await asyncio.gather(*tasks)
-    stats["chunks_indexed"] = sum(results)
+    # Execute Pass 1
+    logger.info("Starting Pass 1: Indexing Definitions...")
+    tasks_p1 = [process_file_bounded_pass1(fd) for fd in files_to_process]
+    results_p1 = await asyncio.gather(*tasks_p1)
+    stats["chunks_indexed"] = sum(results_p1)
+
+    # --- PASS 2: Link Usages ---
+    # We must wait for Pass 1 to complete so all definitions are in the DB.
+    
+    async def process_file_pass2(filepath: str):
+        try:
+            # We re-parse to get the usages (since we don't store them in DB yet)
+            # This is fast as we don't need embeddings/git info/hashing again.
+            chunks = parser.parse_file(filepath, project_root=project_root_str)
+            if not chunks: return
+            
+            # We need the Chunk IDs to be consistent to create edges.
+            # parsing generates deterministic IDs based on content/location.
+            
+            for chunk in chunks:
+                linker.link_chunk_usages(project_root_str, chunk)
+        except Exception as e:
+            logger.error(f"Pass 2 (Linking) failed for {filepath}: {e}")
+
+    async def process_file_bounded_pass2(file_data):
+        filepath, _ = file_data
+        async with FILE_PROCESSING_SEMAPHORE:
+            await process_file_pass2(filepath)
+
+    logger.info("Starting Pass 2: Linking Usages...")
+    tasks_p2 = [process_file_bounded_pass2(fd) for fd in files_to_process]
+    await asyncio.gather(*tasks_p2)
     
     final_count = vector_store.count_chunks(project_root_str)
     scan_type = "Full Rebuild" if force_full_scan else "Incremental Update"
@@ -321,7 +353,9 @@ async def _find_references(symbol_name: str, root_path: str = ".") -> str:
             for source_id, _, _, meta in edges:
                 source_chunk = vector_store.get_chunk_by_id(project_root, source_id)
                 if source_chunk:
-                    all_refs.append(f"Referenced in {source_chunk['filename']} at line {meta.get('line', 'unknown')}\nChunk: {source_chunk.get('symbol_name', 'N/A')}")
+                    match_type = meta.get("match_type", "unknown")
+                    confidence = "High" if match_type == "explicit_import" else "Low"
+                    all_refs.append(f"Referenced in {source_chunk['filename']} at line {meta.get('line', 'unknown')} ({confidence} Confidence: {match_type})\nChunk: {source_chunk.get('symbol_name', 'N/A')}")
         
         if not all_refs:
             return f"No references found for '{symbol_name}' in the knowledge graph."
