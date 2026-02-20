@@ -483,44 +483,62 @@ async def _find_definition(filename: str, line: int, symbol_name: Optional[str] 
             chunks = parser.parse_file(filepath, project_root=project_root)
             
             target_chunk = None
-            target_usage = None
+            target_usages = []
             
             for chunk in chunks:
-                # Are we already at the definition?
                 if chunk.start_line <= line <= chunk.end_line:
+                    # Are we already at the definition?
                     if symbol_name and chunk.symbol_name == symbol_name:
                         return f"File: {chunk.filename} ({chunk.start_line}-{chunk.end_line})\nContent:\n```\n{chunk.content}\n```"
-                
-                # Check for usages on this line
-                for usage in chunk.usages:
-                    if usage.line == line:
-                        if symbol_name is None or usage.name == symbol_name:
-                            target_chunk = chunk
-                            target_usage = usage
-                            break
-                if target_chunk:
+                    
+                    target_chunk = chunk
+                    # Gather ALL usages around this line (+/- 1 for decorator/injection jitter)
+                    for usage in chunk.usages:
+                        if abs(usage.line - line) <= 1:
+                            target_usages.append(usage)
                     break
                     
-            if target_chunk and target_usage:
-                # Query knowledge graph for outgoing edges from this specific chunk
+            if target_chunk and target_usages:
                 edges = knowledge_graph.get_edges(source_id=target_chunk.id, type="call")
                 
-                target_edge = None
-                for edge in edges:
-                    _, target_id, _, meta = edge
-                    # Primary check: Exact line match
-                    if meta.get("line") == target_usage.line:
-                        target_edge = edge
-                        break
-                    # Secondary fallback: Character match or just the first edge if it's the only one
-                    elif meta.get("match_type") == "name_match" or len(edges) == 1:
-                        target_edge = edge
+                resolved_definitions = []
                 
-                if target_edge:
-                    _, target_id, _, _ = target_edge
-                    def_chunk = vector_store.get_chunk_by_id(project_root, target_id)
-                    if def_chunk:
-                        return f"File: {def_chunk['filename']} ({def_chunk['start_line']}-{def_chunk['end_line']})\nContent:\n```\n{def_chunk['content']}\n```"
+                # Try to map all valid edges that match ANY of the captured usages
+                for usage in target_usages:
+                    target_edge = None
+                    for edge in edges:
+                        _, target_id, _, meta = edge
+                        # Match the line logic or name heuristic
+                        if meta.get("line") == usage.line or meta.get("match_type") == "name_match":
+                            target_edge = edge
+                            break
+                    
+                    if target_edge:
+                        _, target_id, _, _ = target_edge
+                        def_chunk = vector_store.get_chunk_by_id(project_root, target_id)
+                        if def_chunk:
+                            resolved_definitions.append((usage.name, def_chunk))
+                
+                # Deduplicate by ID to prevent returning the same chunk
+                seen_ids = set()
+                deduped_defs = []
+                for name, dc in resolved_definitions:
+                    if dc["id"] not in seen_ids:
+                        seen_ids.add(dc["id"])
+                        deduped_defs.append((name, dc))
+                
+                if deduped_defs:
+                    output = []
+                    # Prioritize exact symbol_name match if provided
+                    if symbol_name:
+                        exact_matches = [dc for name, dc in deduped_defs if name == symbol_name]
+                        if exact_matches:
+                            deduped_defs = [(symbol_name, dc) for dc in exact_matches]
+                            
+                    for name, dc in deduped_defs:
+                        output.append(f"Jump to '{name}' -> File: {dc['filename']} ({dc['start_line']}-{dc['end_line']})\nContent:\n```\n{dc['content']}\n```")
+                    return "\n---\n".join(output)
+                    
         except Exception as e:
             logger.error(f"AST-based definition resolution failed: {e}")
             
