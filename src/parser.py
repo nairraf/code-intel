@@ -332,7 +332,9 @@ class CodeParser:
                       symbol_name=None, parent_symbol=None, signature=None, docstring=None, 
                       decorators=None, complexity=0, usages=None) -> CodeChunk:
         # Create a stable ID based on content and location
-        raw_id = f"{filename}:{start}:{end}:{content}"
+        # Normalize line endings to prevent platform identity drift
+        normalized_content = content.replace("\r\n", "\n")
+        raw_id = f"{filename}:{start}:{end}:{normalized_content}"
         chunk_id = hashlib.md5(raw_id.encode('utf-8')).hexdigest()
         return CodeChunk(
             id=chunk_id,
