@@ -26,6 +26,10 @@
 - [x] **Phase 3.4.6: Global Symbol Excellence** (Variable/Constant resolution).
 - [x] **Phase 3.5: Domain-Specific Intelligence** (Firestore Rules, Mermaid).
 - [x] **Scope Tuning:** Implemented `include` and `exclude` glob patterns for noise reduction.
+- [x] **Quality Upgrade**: Migrated to `jina-embeddings-v2-base-code` for superior search accuracy.
+- [x] **Windows Stability**: Fixed FastMCP busy-loop CPU spike (pinned `fastmcp==2.13.3`).
+- [x] **Codebase Cleanup**: Removed diagnostic scripts and standardized environment isolation.
+
 
 ### Upcoming
 - [ ] Advanced linking & discovery (Phase 3.6).

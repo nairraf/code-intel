@@ -9,7 +9,9 @@ AI models often struggle with large codebases because they can't "see" everythin
 *   **Token Savings**: Instead of dumping your entire codebase into a Cloud AI's context (which is expensive and slow), this server finds the *exact* relevant snippets.
 *   **Smarter Context**: Locates code by meaning, not just keywords, ensuring the AI gets the context it actually needs.
 *   **Deep Relationships**: Maps how your code is connected—calls, definitions, and module interactions—so the AI can trace logic across files.
+*   **Superior Code Embeddings**: Optimized for `jina-embeddings-v2-base-code`, which provides high-precision retrieval for 80+ programming languages.
 *   **Cost & Speed Efficiency**: Local embedding caching prevents redundant processing, saving time and compute resources.
+
 
 ---
 
@@ -45,11 +47,12 @@ These tools are specifically designed to give Cloud-based AI agents "Just-in-Tim
 The server requires **Ollama** to handle local embeddings.
 
 1.  **Install Ollama**: Download it from [ollama.com](https://ollama.com).
-2.  **Download the Model**: Run the following command to download the high-precision embedding model:
+2.  **Download the Model**: Run the following command to download the high-precision code embedding model:
     ```bash
-    ollama pull bge-m3
+    ollama pull unclemusclez/jina-embeddings-v2-base-code
     ```
 3.  **Setup Environment**:
+
     *   **Using `uv` (Recommended)**:
         ```bash
         uv sync
@@ -110,9 +113,10 @@ The server manages its own local "vault" and uses local AI to power its semantic
 
 | Component | Default Location | Description |
 |:---|:---|:---|
-| **Intelligence Model** | `bge-m3:latest` | The high-precision "brain" used for semantic understanding (via Ollama). |
+| **Intelligence Model** | `jina-embeddings-v2-base-code` | High-precision code embedding model (via Ollama). |
 | **Central Vault** | `~/.code_intel_store/` | Where all project indexes, knowledge graphs, and local caches are stored. |
 | **Emission Logs** | `~/.code_intel_store/logs/` | Detailed server logs for debugging and monitoring pulse. |
+
 
 ---
 

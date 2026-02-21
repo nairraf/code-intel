@@ -28,7 +28,8 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 - [x] Search Visibility: Exposed Author, Date, and Dependencies in search output.
 - [x] Optimization of embedding latency via local Ollama caching.
 
-### Milestone 3: Advanced Intelligence (Cross-File & Graph) (Current)
+### Milestone 3: Advanced Intelligence (Cross-File & Graph) (Completed)
+
 - [x] **Phase 3.1: Import Resolution Engine**
     - [x] Implement language-specific import resolvers (Python: `sys.path` logic, JS/TS: `node_modules` + `tsconfig`, Dart: `package:`).
     - [x] Map "string imports" to "file system paths".
@@ -56,5 +57,7 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 ### Milestone 4: Deployment & DX
 - [x] **Verification:** Full suite verification (Rebuild, Search, Stats, Graph) passed on fresh install.
 - [x] **Scope Tuning:** Add `include` and `exclude` glob patterns to `search_code` and `refresh_index`.
+- [x] **Infrastructure**: Optimized for Windows (CPU fix) and Jina embeddings.
+
 - [ ] One-click installers/packages.
 - [ ] Comprehensive CLI dashboard.
