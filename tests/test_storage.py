@@ -10,6 +10,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.storage import VectorStore
 from src.models import CodeChunk
+from src.config import EMBEDDING_DIMENSIONS
+
 
 @pytest.fixture
 def temp_store(tmp_path):
@@ -27,7 +29,8 @@ def test_upsert_and_count(temp_store):
         CodeChunk(id="c1", filename="file1.py", start_line=1, end_line=1, content="code1", type="function", language="python"),
         CodeChunk(id="c2", filename="file1.py", start_line=2, end_line=2, content="code2", type="function", language="python")
     ]
-    vectors = [[0.1] * 1024, [0.2] * 1024]
+    vectors = [[0.1] * EMBEDDING_DIMENSIONS, [0.2] * EMBEDDING_DIMENSIONS]
+
     
     temp_store.upsert_chunks(project, chunks, vectors)
     assert temp_store.count_chunks(project) == 2
@@ -38,7 +41,8 @@ def test_upsert_idempotency_by_file(temp_store):
     
     # First upsert
     chunks1 = [CodeChunk(id="v1", filename="main.py", start_line=1, end_line=1, content="v1", type="class", language="python")]
-    temp_store.upsert_chunks(project, chunks1, [[0.1]*1024])
+    temp_store.upsert_chunks(project, chunks1, [[0.1]*EMBEDDING_DIMENSIONS])
+
     assert temp_store.count_chunks(project) == 1
     
     # Second upsert (same file, different IDs)
@@ -46,7 +50,8 @@ def test_upsert_idempotency_by_file(temp_store):
         CodeChunk(id="v2a", filename="main.py", start_line=1, end_line=5, content="v2a", type="function", language="python"),
         CodeChunk(id="v2b", filename="main.py", start_line=6, end_line=10, content="v2b", type="function", language="python")
     ]
-    temp_store.upsert_chunks(project, chunks2, [[0.2]*1024, [0.3]*1024])
+    temp_store.upsert_chunks(project, chunks2, [[0.2]*EMBEDDING_DIMENSIONS, [0.3]*EMBEDDING_DIMENSIONS])
+
     
     assert temp_store.count_chunks(project) == 2
     assert temp_store.get_chunk_by_id(project, "v1") is None
@@ -78,7 +83,8 @@ def test_get_detailed_stats_real(temp_store):
             dependencies=["react"], last_modified="2026-02-19 12:00:00 -0000"
         )
     ]
-    vectors = [[0.1]*1024] * 3
+    vectors = [[0.1]*EMBEDDING_DIMENSIONS] * 3
+
     
     temp_store.upsert_chunks(project, chunks, vectors)
     
@@ -106,7 +112,8 @@ def test_get_detailed_stats_real(temp_store):
 def test_search_real(temp_store):
     project = "search_project"
     chunk = CodeChunk(id="s1", filename="search.py", start_line=1, end_line=1, content="target content", type="function", language="python")
-    vec = [0.5] * 1024
+    vec = [0.5] * EMBEDDING_DIMENSIONS
+
     
     temp_store.upsert_chunks(project, [chunk], [vec])
     
@@ -119,7 +126,8 @@ def test_search_real(temp_store):
 def test_clear_project(temp_store):
     project = "wipe_me"
     chunk = CodeChunk(id="w1", filename="ext.py", start_line=1, end_line=1, content="ext", type="function", language="python")
-    temp_store.upsert_chunks(project, [chunk], [[0.1]*1024])
+    temp_store.upsert_chunks(project, [chunk], [[0.1]*EMBEDDING_DIMENSIONS])
+
     assert temp_store.count_chunks(project) == 1
     
     temp_store.clear_project(project)

@@ -5,6 +5,8 @@ from src.parser import CodeParser
 from src.storage import VectorStore
 from src.embeddings import OllamaClient
 from src.models import CodeChunk
+from src.config import EMBEDDING_DIMENSIONS
+
 
 @pytest.mark.asyncio
 async def test_strict_isolation():
@@ -24,7 +26,8 @@ async def test_strict_isolation():
             content="def secret_a(): pass", type="function", language="python",
             symbol_name="secret_a", parent_symbol=None, signature=None, docstring=None, decorators=None, last_modified=None, author=None
         )
-        vec_a = [0.1] * 1024
+        vec_a = [0.1] * EMBEDDING_DIMENSIONS
+
         store.upsert_chunks(project_a, [chunk_a], [vec_a])
         
         # 2. Add data to Project B
@@ -33,7 +36,8 @@ async def test_strict_isolation():
             content="def secret_b(): pass", type="function", language="python",
             symbol_name="secret_b", parent_symbol=None, signature=None, docstring=None, decorators=None, last_modified=None, author=None
         )
-        vec_b = [0.9] * 1024
+        vec_b = [0.9] * EMBEDDING_DIMENSIONS
+
         store.upsert_chunks(project_b, [chunk_b], [vec_b])
         
         # 3. Search Project A for 'secret'

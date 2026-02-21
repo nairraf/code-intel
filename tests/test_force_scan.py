@@ -6,6 +6,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from unittest.mock import MagicMock, AsyncMock, patch
 from src.storage import VectorStore
 from src.server import refresh_index as refresh_index_tool
+from src.config import EMBEDDING_DIMENSIONS
+
 
 @pytest.mark.asyncio
 async def test_force_full_scan():
@@ -22,7 +24,8 @@ async def test_force_full_scan():
         mock_store.clear_project = MagicMock()
         mock_store.upsert_chunks = MagicMock()
         
-        mock_ollama.get_embeddings_batch = AsyncMock(return_value=[[0.1]*1024])
+        mock_ollama.get_embeddings_batch = AsyncMock(return_value=[[0.1]*EMBEDDING_DIMENSIONS])
+
         
         # Mock parsing a single file
         from src.models import CodeChunk
@@ -65,7 +68,8 @@ async def test_incremental_scan():
         mock_store.clear_project = MagicMock()
         mock_store.upsert_chunks = MagicMock()
         
-        mock_ollama.get_embeddings_batch = AsyncMock(return_value=[[0.1]*1024])
+        mock_ollama.get_embeddings_batch = AsyncMock(return_value=[[0.1]*EMBEDDING_DIMENSIONS])
+
         
         from src.models import CodeChunk
         mock_parser.parse_file.return_value = [CodeChunk(

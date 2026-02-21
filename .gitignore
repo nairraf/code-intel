@@ -6,13 +6,12 @@ dist/
 wheels/
 *.egg-info
 .pytest_cache/
+.coverage
+.python-version
+uv.lock
 
 # Virtual environments
 .venv
-
-# Cognee Local Memory Vault
-.cognee_vault/
-logs/
 
 # IDE files
 .vscode/
@@ -20,3 +19,6 @@ logs/
 # Logs
 *.log
 tmp_lancedb/
+
+# Environment variables
+.env

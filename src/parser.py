@@ -486,7 +486,10 @@ class CodeParser:
                 (decorator (attribute attribute: (identifier) @name))
                 (decorator (call function: (identifier) @name))
                 (decorator (call function: (attribute attribute: (identifier) @name)))
-                (call arguments: (argument_list (identifier) @name))
+                (call arguments: (argument_list [(identifier) (attribute attribute: (identifier))] @name))
+                (assignment right: (identifier) @name)
+                (assignment right: (attribute attribute: (identifier) @name))
+                (type (identifier) @name)
             """,
             "javascript": """
                 (call_expression function: (identifier) @name)

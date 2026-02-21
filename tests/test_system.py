@@ -4,6 +4,8 @@ import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock
 from src.server import refresh_index, search_code
+from src.config import EMBEDDING_DIMENSIONS
+
 
 @pytest.mark.asyncio
 async def test_refresh_index_flow(mocker):
@@ -19,7 +21,8 @@ async def test_refresh_index_flow(mocker):
         mocker.patch("src.server.batch_get_git_info", new_callable=AsyncMock, return_value={})
         
         # Async functions need AsyncMock
-        mock_ollama.get_embeddings_batch = AsyncMock(return_value=[[0.1] * 1024])
+        mock_ollama.get_embeddings_batch = AsyncMock(return_value=[[0.1] * EMBEDDING_DIMENSIONS])
+
         
         result = await refresh_index.fn(str(project_root))
         
@@ -36,7 +39,8 @@ async def test_search_code_flow(mocker):
     mock_vec_store = mocker.patch("src.server.vector_store")
     mock_ollama = mocker.patch("src.server.ollama_client")
     
-    mock_ollama.get_embedding = AsyncMock(return_value=[0.1] * 1024)
+    mock_ollama.get_embedding = AsyncMock(return_value=[0.1] * EMBEDDING_DIMENSIONS)
+
     
     # Mock search results as dicts (which LanceDB .to_list() returns)
     mock_vec_store.search.return_value = [

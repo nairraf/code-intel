@@ -10,6 +10,8 @@ from unittest.mock import AsyncMock, patch
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.server import refresh_index, search_code, get_stats
+from src.config import EMBEDDING_DIMENSIONS
+
 
 @pytest.fixture
 def dummy_project(tmp_path):
@@ -60,13 +62,14 @@ async def test_end_to_end_flow(dummy_project, tmp_path):
             # Mock Ollama to return deterministic vectors based on text length
             # to make search results predictable
             async def mock_get_embedding(text):
-                return [float(len(text))] * 1024
+                return [float(len(text))] * EMBEDDING_DIMENSIONS
             
             async def mock_get_embeddings_batch(texts, **kwargs):
-                return [[float(len(t))] * 1024 for t in texts]
+                return [[float(len(t))] * EMBEDDING_DIMENSIONS for t in texts]
                 
             mock_ollama.get_embedding = AsyncMock(side_effect=mock_get_embedding)
             mock_ollama.get_embeddings_batch = AsyncMock(side_effect=mock_get_embeddings_batch)
+
             
             # 1. Run Refresh Index
             refresh_result = await refresh_index.fn(root_path=str(dummy_project))
