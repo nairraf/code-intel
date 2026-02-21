@@ -17,11 +17,12 @@ def safe_print(*args, **kwargs):
         kwargs['file'] = sys.stderr
     _original_print(*args, **kwargs)
 
+from fnmatch import fnmatch
 from .config import IGNORE_DIRS, SUPPORTED_EXTENSIONS, LOG_DIR
 from .parser import CodeParser
 from .embeddings import OllamaClient
 from .storage import VectorStore
-from .git_utils import batch_get_git_info
+from .git_utils import batch_get_git_info, get_active_branch
 from .knowledge_graph import KnowledgeGraph
 from .linker import SymbolLinker
 from .utils import normalize_path
@@ -60,121 +61,6 @@ def _hash_file(filepath: str) -> str:
     except Exception as e:
         logger.error(f"Failed to hash file {filepath}: {e}")
         return ""
-
-async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False) -> str:
-    project_root_str = normalize_path(root_path)
-    root = Path(project_root_str)
-    if not root.exists():
-        return f"Error: Path {root} does not exist."
-
-    if force_full_scan:
-        vector_store.clear_project(project_root_str)
-        knowledge_graph.clear()
-
-    initial_count = vector_store.count_chunks(project_root_str)
-    existing_hashes = {} if force_full_scan else vector_store.get_project_hashes(project_root_str)
-    
-    stats = {"files_scanned": 0, "chunks_indexed": 0, "errors": 0, "initial_count": initial_count, "skipped": 0}
-    
-    files_to_process = []
-    files_to_skip = []
-    
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS and not d.startswith(".")]
-        for f in filenames:
-            if f.startswith("."): continue
-            file_path = Path(dirpath) / f
-            if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
-                file_str = normalize_path(str(file_path))
-                current_hash = _hash_file(file_str)
-                
-                stored_hash = existing_hashes.get(file_str)
-                
-                if not force_full_scan and stored_hash == current_hash:
-                    files_to_skip.append(file_str)
-                else:
-                    files_to_process.append((file_str, current_hash))
-
-    if not files_to_process and not files_to_skip:
-        return "No supported code files found."
-
-    stats["files_scanned"] = len(files_to_process) + len(files_to_skip)
-    stats["skipped"] = len(files_to_skip)
-
-    if not files_to_process:
-        return (
-            f"Indexing Complete (All {stats['skipped']} files unchanged).\n"
-            f"Total Chunks in Index: {initial_count}"
-        )
-
-    # Process only files that changed
-    # Process only files that changed
-    just_filepaths = [f[0] for f in files_to_process]
-    git_info = await batch_get_git_info(just_filepaths, project_root_str)
-
-    # --- PASS 1: Index Definitions & Embeddings ---
-    async def process_file_pass1(filepath: str, file_hash: str):
-        try:
-            chunks = parser.parse_file(filepath, project_root=project_root_str)
-            if not chunks: return 0
-            file_git = git_info.get(filepath, {"author": None, "last_modified": None})
-            for chunk in chunks:
-                chunk.author = file_git.get("author")
-                chunk.last_modified = file_git.get("last_modified")
-                chunk.content_hash = file_hash
-            
-            # Embeddings
-            texts = [f"{c.language} {c.type} {c.symbol_name}: {c.content}" for c in chunks]
-            embeddings = await ollama_client.get_embeddings_batch(texts, semaphore=INFERENCE_SEMAPHORE)
-            
-            if embeddings:
-                vector_store.upsert_chunks(project_root_str, chunks, embeddings)
-            
-            return len(chunks)
-        except Exception as e:
-            logger.error(f"Pass 1 (Indexing) failed for {filepath}: {e}")
-            return 0
-
-    async def process_file_bounded_pass1(file_data):
-        filepath, file_hash = file_data
-        async with FILE_PROCESSING_SEMAPHORE:
-            return await process_file_pass1(filepath, file_hash)
-
-    # Execute Pass 1
-    logger.info("Starting Pass 1: Indexing Definitions...")
-    tasks_p1 = [process_file_bounded_pass1(fd) for fd in files_to_process]
-    results_p1 = await asyncio.gather(*tasks_p1)
-    stats["chunks_indexed"] = sum(results_p1)
-
-    # --- PASS 2: Link Usages ---
-    # We must wait for Pass 1 to complete so all definitions are in the DB.
-    
-    async def process_file_pass2(filepath: str):
-        try:
-            # We re-parse to get the usages (since we don't store them in DB yet)
-            # This is fast as we don't need embeddings/git info/hashing again.
-            chunks = parser.parse_file(filepath, project_root=project_root_str)
-            if not chunks: return
-            
-            # We need the Chunk IDs to be consistent to create edges.
-            # parsing generates deterministic IDs based on content/location.
-            
-            for chunk in chunks:
-                linker.link_chunk_usages(project_root_str, chunk)
-        except Exception as e:
-            logger.error(f"Pass 2 (Linking) failed for {filepath}: {e}")
-
-    async def process_file_bounded_pass2(file_data):
-        filepath, _ = file_data
-        async with FILE_PROCESSING_SEMAPHORE:
-            await process_file_pass2(filepath)
-
-    logger.info("Starting Pass 2: Linking Usages...")
-    tasks_p2 = [process_file_bounded_pass2(fd) for fd in files_to_process]
-    await asyncio.gather(*tasks_p2)
-    
-    final_count = vector_store.count_chunks(project_root_str)
-from fnmatch import fnmatch
 
 def _should_process_file(filepath: str, project_root: str, include: Optional[str], exclude: Optional[str]) -> bool:
     """
@@ -296,9 +182,6 @@ async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False
             # This is fast as we don't need embeddings/git info/hashing again.
             chunks = parser.parse_file(filepath, project_root=project_root_str)
             if not chunks: return
-            
-            # We need the Chunk IDs to be consistent to create edges.
-            # parsing generates deterministic IDs based on content/location.
             
             for chunk in chunks:
                 linker.link_chunk_usages(project_root_str, chunk)
@@ -444,7 +327,6 @@ async def get_stats_impl(root_path: str = ".") -> str:
         test_gaps = "\n".join([f"  - {g['symbol']} ({g['complexity']}) in {Path(g['file']).name}" for g in stats.get("test_gaps", [])[:5]])
         
         # Active branch retrieval
-        from .git_utils import get_active_branch
         branch = await get_active_branch(project_root_str)
         
         pulse = f"\n\nProject Pulse:\n  - Active Branch: {branch}\n  - Stale Files:   {stats.get('stale_files_count', 0)}"

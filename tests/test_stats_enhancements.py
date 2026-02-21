@@ -36,8 +36,7 @@ async def test_get_detailed_stats_enhancements():
     
     with patch.object(VectorStore, 'get_detailed_stats', return_value=mock_stats), \
          patch('src.server.batch_get_git_info', return_value={}), \
-         patch('src.git_utils.is_git_repo', return_value=True), \
-         patch('src.git_utils.get_active_branch', return_value="feat/god-mode"):
+         patch('src.server.get_active_branch', return_value="feat/god-mode"):
         
         # We need to mock get_active_branch once it's implemented, 
         # but for RED phase we'll just let it fail or mock the server call dependencies.

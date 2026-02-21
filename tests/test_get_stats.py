@@ -26,7 +26,7 @@ async def test_get_stats_active():
         }
         
         with patch('pathlib.Path.resolve', return_value=MagicMock(side_effect=lambda x: str(x))), \
-             patch('src.git_utils.get_active_branch', return_value="main"):
+             patch('src.server.get_active_branch', return_value="main"):
             
             # Run tool
             result = await get_stats_impl(root_path="/root")
