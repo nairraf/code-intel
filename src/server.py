@@ -238,6 +238,22 @@ async def search_code_impl(query: str, root_path: str = ".", limit: int = 10, in
         query_vec = await ollama_client.get_embedding(query)
         results = vector_store.search(project_root_str, query_vec, limit=fetch_limit)
         
+        # --- HYBRID RECALL ENHANCEMENT ---
+        # If the query contains highly specific terms (CORS, Firebase, etc.),
+        # extract keywords and perform a literal textual search to boost recall.
+        import re
+        keywords = re.findall(r'\b[A-Z]{3,}\b|\b[A-Za-z]{6,}\b', query) # ACRONYMS or words >= 6 chars
+        if keywords:
+            keyword_limit = limit // 2
+            seen_ids = set(r['id'] for r in results)
+            for kw in keywords[:3]: # Limit to top 3 long keywords to avoid spam
+                text_results = vector_store.find_chunks_containing_text(project_root_str, kw, limit=keyword_limit)
+                for tr in text_results:
+                    if tr['id'] not in seen_ids:
+                        # Append keyword results at the end (lower score than semantic but better than nothing)
+                        results.append(tr)
+                        seen_ids.add(tr['id'])
+        
         if not results: return f"No matching code found in project: {project_root_str}"
         
         filtered_results = []
@@ -249,7 +265,7 @@ async def search_code_impl(query: str, root_path: str = ".", limit: int = 10, in
                     break
         
         if not filtered_results:
-             return f"No matches found after applying filters (fetched {len(results)} raw candidates)."
+             return f"No matches found after applying filters (fetched {len(results)} candidates)."
 
         output = [f"Results for project: {project_root_str}\n"]
         for r in filtered_results:
@@ -355,10 +371,21 @@ async def find_definition(filename: str, line: int, symbol_name: Optional[str] =
     """
     return await _find_definition(filename, line, symbol_name, root_path)
 
+def _get_file_priority(filename: str) -> int:
+    """Assigns priority score to files: Source > Docs > Artifacts."""
+    ext = Path(filename).suffix.lower()
+    if ext in ('.py', '.dart', '.ts', '.js', '.go', '.rs', '.java', '.cpp', '.c'):
+        return 100
+    if ext == '.md':
+        # Lower priority for documentation
+        return 50
+    return 10
+    
 async def _find_definition(filename: str, line: int, symbol_name: Optional[str] = None, root_path: str = ".") -> str:
     try:
         project_root = normalize_path(root_path)
         filepath = normalize_path(filename)
+        source_lang = parser._get_language(filepath)
         
         # 1. First, try AST-based origin resolution via the Knowledge Graph
         try:
@@ -402,7 +429,7 @@ async def _find_definition(filename: str, line: int, symbol_name: Optional[str] 
                         if def_chunk:
                             resolved_definitions.append((usage.name, def_chunk))
                 
-                # Deduplicate by ID to prevent returning the same chunk
+                # Deduplicate and prioritize by source language + file type
                 seen_ids = set()
                 deduped_defs = []
                 for name, dc in resolved_definitions:
@@ -411,12 +438,29 @@ async def _find_definition(filename: str, line: int, symbol_name: Optional[str] 
                         deduped_defs.append((name, dc))
                 
                 if deduped_defs:
+                    # Sort candidates: same language first, then highest file priority
+                    deduped_defs.sort(
+                        key=lambda x: (x[1].get("language") == source_lang, _get_file_priority(x[1]["filename"])), 
+                        reverse=True
+                    )
+                    
                     output = []
                     # Prioritize exact symbol_name match if provided
                     if symbol_name:
                         exact_matches = [dc for name, dc in deduped_defs if name == symbol_name]
                         if exact_matches:
                             deduped_defs = [(symbol_name, dc) for dc in exact_matches]
+                        else:
+                            # If no exact match found via line edges, try a GLOBAL exact fallback 
+                            # before giving up. This helps when imports are tricky or decorators weren't linked.
+                            global_matches = vector_store.find_chunks_by_symbol(project_root, symbol_name)
+                            if global_matches:
+                                # Filter global matches by language & priority
+                                global_matches.sort(
+                                    key=lambda x: (x.get("language") == source_lang, _get_file_priority(x["filename"])),
+                                    reverse=True
+                                )
+                                deduped_defs = [(symbol_name, g) for g in global_matches]
                             
                     for name, dc in deduped_defs:
                         output.append(f"Jump to '{name}' -> File: {dc['filename']} ({dc['start_line']}-{dc['end_line']})\nContent:\n```\n{dc['content']}\n```")
@@ -429,8 +473,25 @@ async def _find_definition(filename: str, line: int, symbol_name: Optional[str] 
         if symbol_name:
             targets = vector_store.find_chunks_by_symbol(project_root, symbol_name)
             if not targets:
-                return f"No definition found for symbol '{symbol_name}'"
+                # 3. Third Fallback: Try a broad usage search if even definition fails
+                usage_chunks = vector_store.find_chunks_with_usage(project_root, symbol_name)
+                if usage_chunks:
+                    # Prioritize source language and source code vs docs
+                    usage_chunks.sort(
+                        key=lambda x: (x.get("language") == source_lang, _get_file_priority(x["filename"])),
+                        reverse=True
+                    )
+                    output = []
+                    for t in usage_chunks:
+                        output.append(f"Heuristic Reference Found -> File: {t['filename']} ({t['start_line']}-{t['end_line']})\nContent:\n```\n{t['content']}\n```")
+                    return "\n---\n".join(output)
+                return f"No definition or clear usage found for symbol '{symbol_name}'"
             
+            # Sort global matches
+            targets.sort(
+                key=lambda x: (x.get("language") == source_lang, _get_file_priority(x["filename"])),
+                reverse=True
+            )
             output = []
             for t in targets:
                 output.append(f"File: {t['filename']} ({t['start_line']}-{t['end_line']})\nContent:\n```\n{t['content']}\n```")
@@ -464,22 +525,47 @@ async def _find_references(symbol_name: str, root_path: str = ".") -> str:
         # 1. Find the chunk(s) defining the symbol
         def_chunks = vector_store.find_chunks_by_symbol(project_root, symbol_name)
         if not def_chunks:
-            return f"Symbol '{symbol_name}' not found in definitions."
-            
+            # 2. Fallback: Symbol might be external (e.g., FastAPI Depends, decorators). 
+            # 2. Fallback: Symbol might be external (e.g., FastAPI Depends, decorators).
+            # Search usages across project chunks directly.
+            usage_chunks = vector_store.find_chunks_with_usage(project_root, symbol_name)
+            if not usage_chunks:
+                return f"Symbol '{symbol_name}' not found locally or in project usages."
+
+            # If we originated from a specific file, we should try to discover its language
+            # but _find_references doesn't take a source filename.
+            # We will just prioritize source code over documentation globally.
+            usage_chunks.sort(key=lambda x: _get_file_priority(x["filename"]), reverse=True)
+
+            all_refs = []
+            for c in usage_chunks:
+                # Output format similar to regular usage edges
+                all_refs.append(f"Referenced (external/unlinked) in {c['filename']} at line {c['start_line']} (Fallback Search)\nChunk: {c.get('symbol_name', 'N/A')}")
+            return "\n---\n".join(all_refs)
+
         all_refs = []
         for d in def_chunks:
             edges = knowledge_graph.get_edges(target_id=d["id"], type="call")
-            for source_id, _, _, meta in edges:
-                source_chunk = vector_store.get_chunk_by_id(project_root, source_id)
-                if source_chunk:
-                    match_type = meta.get("match_type", "unknown")
-                    confidence = "High" if match_type == "explicit_import" else "Low"
-                    all_refs.append(f"Referenced in {source_chunk['filename']} at line {meta.get('line', 'unknown')} ({confidence} Confidence: {match_type})\nChunk: {source_chunk.get('symbol_name', 'N/A')}")
-        
+            # If multiple definitions exist, and we have edges, show them grouped.
+            if edges:
+                for edge in edges:
+                    source_id, _, _, meta = edge
+                    source_chunk = vector_store.get_chunk_by_id(project_root, source_id)
+                    if source_chunk:
+                        match_type = meta.get("match_type", "unknown")
+                        confidence = "High" if match_type == "explicit_import" else "Low"
+                        # Prioritize source files
+                        all_refs.append({
+                            "priority": _get_file_priority(source_chunk["filename"]),
+                            "text": f"Referenced in {source_chunk['filename']} at line {meta.get('line', '??')} ({confidence} Confidence: {match_type})\nContext: {meta.get('context', 'N/A')}"
+                        })
+
         if not all_refs:
-            return f"No references found for '{symbol_name}' in the knowledge graph."
-            
-        return "\n---\n".join(all_refs)
+            return f"Symbol '{symbol_name}' found at {def_chunks[0]['filename']} L{def_chunks[0]['start_line']}, but no references were discovered in the knowledge graph."
+
+        # Sort by priority and format
+        all_refs.sort(key=lambda x: x["priority"], reverse=True)
+        return "\n---\n".join([r["text"] for r in all_refs])
     except Exception as e:
         return f"Error finding references: {e}"
 

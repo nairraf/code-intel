@@ -32,10 +32,25 @@ class SymbolLinker:
         resolver = self.resolvers.get(lang)
         project_root_path = Path(normalize_path(project_root))
         
-        # Pre-fetch potentially relevant symbols to minimize DB hits? 
-        # No, for now let's query per usage as premature optimization might be complex.
-        
+        # Prepare list of symbols to resolve: standard usages + decorators
+        symbols_to_resolve = []
         for usage in chunk.usages:
+            symbols_to_resolve.append(usage)
+            
+        if chunk.decorators:
+            for dec in chunk.decorators:
+                # Extract base symbol name from decorator: e.g. "@router.post" -> "post" or "verify"
+                # Strip @ and split by . then take the last part
+                clean_dec = dec.lstrip('@').split('.')[-1].split('(')[0]
+                # Map it to a SymbolUsage object for consistency (line/char might be approximate)
+                symbols_to_resolve.append(SymbolUsage(
+                    name=clean_dec,
+                    context=dec,
+                    line=chunk.start_line, # Decorators are usually at the start of a chunk
+                    character=0
+                ))
+
+        for usage in symbols_to_resolve:
             targets = []
             
             # 1. Try Import Resolution (if available)
@@ -72,8 +87,9 @@ class SymbolLinker:
             
             # 2. Heuristic: Search for symbol name globally (Fallback)
             if not targets:
-                # Global search
-                targets = self.vector_store.find_chunks_by_symbol(project_root, usage.name)
+                # Global search - Filter by language to prevent cross-language collisions
+                all_targets = self.vector_store.find_chunks_by_symbol(project_root, usage.name)
+                targets = [t for t in all_targets if t.get("language") == lang]
                 for t in targets:
                     t["_match_type"] = "name_match"
             
