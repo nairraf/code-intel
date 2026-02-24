@@ -1,8 +1,8 @@
 import sqlite3
-import pickle
+import json
 import logging
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from .config import CACHE_DB_PATH
 
@@ -66,12 +66,26 @@ class EmbeddingCache:
                 row = cursor.fetchone()
                 
                 if row:
-                    # Update last_accessed
+                    # Update last_accessed with timezone-aware datetime
+                    now = datetime.now(timezone.utc)
                     conn.execute(
                         "UPDATE embeddings SET last_accessed = ? WHERE hash = ?",
-                        (datetime.utcnow(), text_hash)
+                        (now, text_hash)
                     )
-                    return pickle.loads(row[0])
+                    
+                    # Migration logic for legacy pickle data
+                    try:
+                        # row[0] is the vector blob
+                        data = row[0]
+                        if isinstance(data, bytes) and not data.startswith(b'['):
+                             # Likely a pickle blob (which doesn't start with '[' like JSON lists)
+                             raise ValueError("Legacy pickle data detected")
+                        return json.loads(data)
+                    except (json.JSONDecodeError, ValueError, TypeError):
+                        # Legacy pickle entry or corrupted JSON — discard it
+                        logger.info(f"Evicting legacy or invalid cache entry: {text_hash}")
+                        conn.execute("DELETE FROM embeddings WHERE hash = ?", (text_hash,))
+                        return None
         except Exception as e:
             logger.warning(f"Cache read failed for {text_hash}: {e}")
         
@@ -81,8 +95,8 @@ class EmbeddingCache:
         """Stores an embedding in the cache."""
         text_hash = self._compute_hash(text, model)
         try:
-            blob = pickle.dumps(vector)
-            now = datetime.utcnow()
+            blob = json.dumps(vector).encode('utf-8')
+            now = datetime.now(timezone.utc)
             with sqlite3.connect(self.db_path) as conn:
                 try:
                     conn.execute(

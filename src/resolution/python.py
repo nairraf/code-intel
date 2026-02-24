@@ -29,11 +29,17 @@ class PythonImportResolver(ImportResolver):
         source_path = Path(source_file)
         
         # 1. Handle Relative Imports (starting with .)
+        resolved = None
         if import_string.startswith('.'):
-            return self._resolve_relative(source_path, import_string)
-        
-        # 2. Handle Absolute Imports
-        return self._resolve_absolute(project_root, import_string)
+            resolved = self._resolve_relative(source_path, import_string)
+        else:
+            # 2. Handle Absolute Imports
+            resolved = self._resolve_absolute(project_root, import_string)
+            
+        if resolved and not self._is_within_root(resolved, project_root):
+            return None
+            
+        return resolved
 
     def _resolve_relative(self, source_path: Path, import_string: str) -> Optional[str]:
         """

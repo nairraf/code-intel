@@ -24,14 +24,18 @@ class DartImportResolver(ImportResolver):
                 return None
                 
         # 1. Handle Package Imports
+        resolved = None
         if import_string.startswith('package:'):
-            return self._resolve_package(project_root, import_string)
+            resolved = self._resolve_package(project_root, import_string)
 
         # 2. Handle Relative Imports (usually start with ./ or ../ or just filename)
-        if not import_string.startswith('dart:'):
-            return self._resolve_relative(source_file, import_string)
+        elif not import_string.startswith('dart:'):
+            resolved = self._resolve_relative(source_file, import_string)
 
-        return None
+        if resolved and not self._is_within_root(resolved, project_root):
+            return None
+
+        return resolved
 
     def _resolve_relative(self, source_file: str, import_string: str) -> Optional[str]:
         try:

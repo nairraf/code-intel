@@ -28,17 +28,18 @@ class JSImportResolver(ImportResolver):
             else:
                 return None
                 
+        resolved = None
         # 1. Handle Relative Imports
         if import_string.startswith('.'):
-            return self._resolve_relative(source_file, import_string)
-        
-        # 2. Handle Path Aliases (e.g. @/components/Button)
-        resolved = self._resolve_alias(project_root, import_string)
-        if resolved:
-            return resolved
+            resolved = self._resolve_relative(source_file, import_string)
+        else:
+            # 2. Handle Path Aliases (e.g. @/components/Button)
+            resolved = self._resolve_alias(project_root, import_string)
             
-        # 3. Handle Node Modules (Optimistic check for source code in node_modules)
-        return None
+        if resolved and not self._is_within_root(resolved, project_root):
+            return None
+            
+        return resolved
 
     def _resolve_relative(self, source_file: str, import_string: str) -> Optional[str]:
         source_dir = Path(source_file).parent

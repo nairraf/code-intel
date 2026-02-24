@@ -28,6 +28,11 @@ A persistent knowledge graph tracks imports and function calls across your entir
 
 ---
 
+### 🛡️ Security Hardened
+Independently audited and remediated against OWASP Top 10 vulnerabilities. Includes robust sanitization for vector filters, safe JSON-based serialization, and strict path containment to prevent traversal attacks.
+
+---
+
 ## 🛠️ Tools for Cloud AI
 
 These tools are specifically designed to give Cloud-based AI agents "Just-in-Time" knowledge without bloating their memory.

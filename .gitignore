@@ -19,6 +19,7 @@ uv.lock
 # Logs
 *.log
 tmp_lancedb/
+.lancedb/
 
 # Environment variables
 .env

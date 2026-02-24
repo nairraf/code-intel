@@ -1,5 +1,6 @@
 import lancedb
 import pyarrow as pa
+import re
 import hashlib
 import logging
 from typing import List, Optional
@@ -9,6 +10,22 @@ from .models import CodeChunk
 from .utils import normalize_path
 
 logger = logging.getLogger(__name__)
+
+def _sanitize_filter_value(value: str) -> str:
+    """
+    Escapes a string value for safe inclusion in LanceDB SQL-like filters.
+    Doubles internal quotes and validates against injection patterns.
+    """
+    if not isinstance(value, str):
+        value = str(value)
+    # Escape internal double quotes
+    escaped = value.replace('"', '""')
+    # Reject values containing SQL keywords that shouldn't appear in identifiers
+    # This is defense-in-depth; the escaping above should be sufficient
+    dangerous_patterns = re.compile(r'\b(OR|AND|DROP|DELETE|INSERT|UPDATE|UNION|;)\b', re.IGNORECASE)
+    if dangerous_patterns.search(escaped):
+        raise ValueError(f"Potentially dangerous filter value rejected: {value!r}")
+    return escaped
 
 class VectorStore:
     """Storage layer for code chunks using LanceDB with project-level isolation."""
@@ -20,7 +37,7 @@ class VectorStore:
     def _get_table_name(self, project_root: str) -> str:
         """Generates a stable, unique table name for a given project root."""
         normalized_root = normalize_path(project_root)
-        path_hash = hashlib.md5(normalized_root.encode('utf-8')).hexdigest()
+        path_hash = hashlib.sha256(normalized_root.encode('utf-8')).hexdigest()[:32]
         return f"chunks_{path_hash}"
 
     def _get_schema(self):
@@ -90,8 +107,7 @@ class VectorStore:
         # Delete existing entries for the file paths involved in this batch
         filepaths = list(set([c.filename for c in chunks]))
         for path in filepaths:
-            # Note: filter strings must be escaped if paths contain special chars
-            safe_path = path.replace('"', '""')
+            safe_path = _sanitize_filter_value(path)
             table.delete(f'filename = "{safe_path}"')
             
         table.add(data)
@@ -114,9 +130,42 @@ class VectorStore:
             return []
         
         table = self.db.open_table(table_name)
-        # LanceDB uses SQL-like filtering
-        results = table.search().where(f'symbol_name = "{symbol_name}"').to_list()
+        # LanceDB uses SQL-like filtering - sanitize input
+        safe_name = _sanitize_filter_value(symbol_name)
+        results = table.search().where(f'symbol_name = "{safe_name}"').to_list()
         return results
+
+    def find_chunks_with_usage(self, project_root: str, symbol_name: str) -> List[dict]:
+        """Finds chunks whose content references the target symbol name (used for external symbols)."""
+        table_name = self._get_table_name(project_root)
+        if table_name not in self.db.table_names():
+            return []
+        
+        table = self.db.open_table(table_name)
+        safe_name = _sanitize_filter_value(symbol_name)
+        # LanceDB supports basic wildcard string matching with LIKE
+        try:
+            results = table.search().where(f'content LIKE "%{safe_name}%"').to_list()
+            return results
+        except Exception as e:
+            logger.error(f"Fallback usage search failed: {e}")
+            return []
+
+    def find_chunks_containing_text(self, project_root: str, query_text: str, limit: int = 10) -> List[dict]:
+        """Performs a literal textual search across chunk content (Keyword Fallback)."""
+        table_name = self._get_table_name(project_root)
+        if table_name not in self.db.table_names():
+            return []
+        
+        table = self.db.open_table(table_name)
+        safe_query = _sanitize_filter_value(query_text)
+        try:
+            # case-insensitive search if supported, otherwise LIKE match
+            results = table.search().where(f'content LIKE "%{safe_query}%"').limit(limit).to_list()
+            return results
+        except Exception as e:
+            logger.error(f"Keyword search failed for '{query_text}': {e}")
+            return []
 
     def find_chunks_by_symbol_in_file(self, project_root: str, symbol_name: str, filepath: str) -> List[dict]:
         """Finds chunks with a specific symbol provided the filepath."""
@@ -127,9 +176,10 @@ class VectorStore:
                 return []
             
             table = self.db.open_table(table_name)
-            safe_filepath = normalize_path(filepath).replace('"', '""')
+            safe_name = _sanitize_filter_value(symbol_name)
+            safe_filepath = _sanitize_filter_value(normalize_path(filepath))
             
-            results = table.search().where(f'symbol_name = "{symbol_name}" AND filename = "{safe_filepath}"').to_list()
+            results = table.search().where(f'symbol_name = "{safe_name}" AND filename = "{safe_filepath}"').to_list()
             return results
         except Exception as e:
             # logger.error(f"Error querying symbol in file: {e}")
@@ -142,7 +192,8 @@ class VectorStore:
             return None
         
         table = self.db.open_table(table_name)
-        results = table.search().where(f'id = "{chunk_id}"').to_list()
+        safe_id = _sanitize_filter_value(chunk_id)
+        results = table.search().where(f'id = "{safe_id}"').to_list()
         return results[0] if results else None
 
     def clear_project(self, project_root: str):

@@ -58,6 +58,7 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 - [x] **Verification:** Full suite verification (Rebuild, Search, Stats, Graph) passed on fresh install.
 - [x] **Scope Tuning:** Add `include` and `exclude` glob patterns to `search_code` and `refresh_index`.
 - [x] **Infrastructure**: Optimized for Windows (CPU fix) and Jina embeddings.
+- [x] **Security Hardening**: Remediated findings from audit (SQLi, Pickle, Path Traversal). Added robust sanitization and path containment.
 
 - [ ] One-click installers/packages.
 - [ ] Comprehensive CLI dashboard.

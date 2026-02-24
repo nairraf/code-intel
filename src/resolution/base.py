@@ -26,3 +26,15 @@ class ImportResolver(ABC):
             Absolute path to the resolved file, or None if resolution fails/is external.
         """
         pass
+
+    @staticmethod
+    def _is_within_root(resolved_path: str, project_root: Path) -> bool:
+        """Ensures a resolved path stays within the project boundary."""
+        try:
+            resolved = Path(resolved_path).resolve()
+            root = project_root.resolve()
+            # This will raise ValueError if resolved is not a subpath of root
+            resolved.relative_to(root)
+            return True
+        except (ValueError, Exception):
+            return False

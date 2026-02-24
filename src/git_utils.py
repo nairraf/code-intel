@@ -8,8 +8,20 @@ import traceback
 
 logger = logging.getLogger(__name__)
 
+# Shared Git environment to prevent interactive prompts and lock issues
+_GIT_ENV = {
+    **os.environ,
+    "GIT_TERMINAL_PROMPT": "0",
+    "GIT_OPTIONAL_LOCKS": "0",
+}
+
 async def is_git_repo(root: str) -> bool:
     """Check if the given directory is inside a git repository."""
+    # Safety Check: Ensure directory exists before passing to cwd
+    if not os.path.isdir(root):
+        logger.warning(f"Git repo check: path is not a directory: {root}")
+        return False
+        
     try:
         process = await asyncio.create_subprocess_exec(
             "git", "rev-parse", "--is-inside-work-tree",
@@ -17,6 +29,7 @@ async def is_git_repo(root: str) -> bool:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
+            env=_GIT_ENV
         )
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30)
         is_repo = process.returncode == 0 and stdout.decode().strip() == "true"
@@ -45,6 +58,10 @@ async def get_file_git_info(filepath: str, repo_root: str) -> Dict[str, Optional
     try:
         # Crucial for Windows: ensure both paths are resolved and same-case for relpath
         abs_repo = str(Path(repo_root).resolve())
+        if not os.path.isdir(abs_repo):
+             logger.warning(f"Git info lookup: repo_root is not a directory: {abs_repo}")
+             return {"author": None, "last_modified": None}
+             
         abs_file = str(Path(filepath).resolve())
         rel_path = os.path.relpath(abs_file, abs_repo)
         
@@ -54,6 +71,7 @@ async def get_file_git_info(filepath: str, repo_root: str) -> Dict[str, Optional
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
+            env=_GIT_ENV
         )
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=10)
         
@@ -103,13 +121,17 @@ async def get_active_branch(repo_root: str) -> str:
     """Get the current active branch name."""
     try:
         abs_repo = str(Path(repo_root).resolve())
+        if not os.path.isdir(abs_repo):
+             logger.warning(f"Git branch lookup: repo_root is not a directory: {abs_repo}")
+             return "unknown"
+             
         process = await asyncio.create_subprocess_exec(
             "git", "rev-parse", "--abbrev-ref", "HEAD",
             cwd=abs_repo,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
-            env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"}
+            env=_GIT_ENV
         )
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5)
         
