@@ -155,15 +155,20 @@ class CodeParser:
         except Exception:
             return []
 
+    def _get_language(self, filepath: str) -> Optional[str]:
+        """Returns the language name based on file extension."""
+        ext = Path(filepath).suffix.lower()
+        return self.ext_map.get(ext)
+
     def _chunk_node(self, node: Node, full_content: str, filepath: str, lang_name: str) -> List[CodeChunk]:
         """Walks the AST and extracts meaningful chunks."""
         relevant_types = {
-            "python": {"class_definition", "function_definition", "assignment"},
+            "python": {"class_definition", "function_definition", "assignment", "expression_statement", "call"},
             "javascript": {"class_declaration", "function_declaration", "method_definition", "arrow_function"},
             "typescript": {"class_declaration", "function_declaration", "method_definition", "interface_declaration", "enum_declaration"},
             "tsx": {"class_declaration", "function_declaration", "method_definition", "interface_declaration"},
             "go": {"function_declaration", "method_declaration", "type_declaration"},
-            "dart": {"class_definition", "function_signature", "method_signature", "method_declaration", "static_final_declaration_list", "initialized_identifier_list", "declaration"},
+            "dart": {"class_definition", "function_signature", "method_signature", "method_declaration", "static_final_declaration_list", "initialized_identifier_list", "declaration", "expression_statement", "call"},
             "java": {"class_declaration", "method_declaration", "interface_declaration"},
             "rust": {"function_item", "impl_item", "trait_item", "macro_definition"},
             "cpp": {"function_definition", "class_specifier", "struct_specifier"},
@@ -180,19 +185,34 @@ class CodeParser:
             # python assignments are children of expression_statement, whose parent is module
             # dart declarations are direct children of program
             is_global = False
-            if lang == "python" and node.type == "assignment":
-                if node.parent and node.parent.type == "expression_statement":
-                    if node.parent.parent and node.parent.parent.type == "module":
-                        is_global = True
-                if not is_global:
+            if lang == "python":
+                if node.type == "assignment":
+                    if node.parent and node.parent.type == "expression_statement":
+                        if node.parent.parent and node.parent.parent.type == "module":
+                            is_global = True
+                elif node.type in ("expression_statement", "call"):
+                    # Only index top-level expressions/calls
+                    curr = node
+                    while curr.parent:
+                        curr = curr.parent
+                    if curr.type == "module" and (node.parent.type == "module" if node.type == "expression_statement" else node.parent.type == "expression_statement" and node.parent.parent.type == "module"):
+                         is_global = True
+                
+                if not is_global and node.type in ("assignment", "expression_statement", "call"):
                     for child in node.children:
                         chunks.extend(self._recursive_chunk(child, content, filepath, lang, targets, parent_name=parent_name))
                     return chunks
 
-            if lang == "dart" and node.type in ("static_final_declaration_list", "initialized_identifier_list", "declaration"):
-                if node.parent and node.parent.type == "program":
-                    is_global = True
-                if not is_global:
+            if lang == "dart":
+                if node.type in ("static_final_declaration_list", "initialized_identifier_list", "declaration"):
+                    if node.parent and node.parent.type == "program":
+                        is_global = True
+                elif node.type in ("expression_statement", "call"):
+                     # Top-level Dart calls
+                     if node.parent.type == "program" if node.type == "expression_statement" else node.parent.type == "expression_statement" and node.parent.parent.type == "program":
+                         is_global = True
+
+                if not is_global and node.type in ("static_final_declaration_list", "initialized_identifier_list", "declaration", "expression_statement", "call"):
                     for child in node.children:
                         chunks.extend(self._recursive_chunk(child, content, filepath, lang, targets, parent_name=parent_name))
                     return chunks
@@ -335,7 +355,7 @@ class CodeParser:
         # Normalize line endings to prevent platform identity drift
         normalized_content = content.replace("\r\n", "\n")
         raw_id = f"{filename}:{start}:{end}:{normalized_content}"
-        chunk_id = hashlib.md5(raw_id.encode('utf-8')).hexdigest()
+        chunk_id = hashlib.sha256(raw_id.encode('utf-8')).hexdigest()[:32]
         return CodeChunk(
             id=chunk_id,
             filename=str(filename),

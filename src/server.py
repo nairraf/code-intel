@@ -245,14 +245,15 @@ async def search_code_impl(query: str, root_path: str = ".", limit: int = 10, in
         keywords = re.findall(r'\b[A-Z]{3,}\b|\b[A-Za-z]{6,}\b', query) # ACRONYMS or words >= 6 chars
         if keywords:
             keyword_limit = limit // 2
-            seen_ids = set(r['id'] for r in results)
+            seen_ids = set(r.get('id') for r in results if r.get('id'))
             for kw in keywords[:3]: # Limit to top 3 long keywords to avoid spam
                 text_results = vector_store.find_chunks_containing_text(project_root_str, kw, limit=keyword_limit)
                 for tr in text_results:
-                    if tr['id'] not in seen_ids:
+                    tr_id = tr.get('id')
+                    if tr_id and tr_id not in seen_ids:
                         # Append keyword results at the end (lower score than semantic but better than nothing)
                         results.append(tr)
-                        seen_ids.add(tr['id'])
+                        seen_ids.add(tr_id)
         
         if not results: return f"No matching code found in project: {project_root_str}"
         
