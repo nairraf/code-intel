@@ -62,12 +62,19 @@ class SymbolLinker:
                 # Heuristic: Iterate through dependencies to see if we can resolve the symbol
                 # This is O(N*M) where N=usages, M=deps. Usually small.
                 for dep in chunk.dependencies:
-                    # Construct potential import string? 
-                    # For Python: "from module import Symbol" -> resolve("module") -> file?
-                    # The dependency string in 'chunk.dependencies' is just the string found in code (e.g. "os", "src.utils")
+                    target_dep = dep
+                    
+                    # If this dependency encodes a specific imported symbol (e.g. Python "module::Symbol")
+                    if "::" in dep:
+                        mod_part, sym_part = dep.split("::", 1)
+                        if sym_part != usage.name:
+                            # This explicit import does not match our usage name, skip
+                            continue
+                        # If it does match, we resolve the module part
+                        target_dep = mod_part
                     
                     # Try to resolve the dependency string to a file path
-                    resolved_path = resolver.resolve(chunk.filename, dep, project_root=project_root_path)
+                    resolved_path = resolver.resolve(chunk.filename, target_dep, project_root=project_root_path)
                     
                     if resolved_path:
                         # Normalize to absolute POSIX for DB matching
@@ -84,6 +91,8 @@ class SymbolLinker:
                             for m in matches:
                                 m["_match_type"] = "explicit_import"
                             targets.extend(matches)
+                            # Once we find it via explicit resolution, we can stop checking deps
+                            break
             
             # 2. Heuristic: Search for symbol name globally (Fallback)
             if not targets:
