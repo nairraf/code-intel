@@ -24,12 +24,12 @@ Our embedding cache drastically reduces latency. By storing "fingerprints" of yo
 Go beyond simple keyword matching. Search for concepts like "how do we handle user authentication?" and find the relevant logic even if the exact words aren't used.
 
 ### 🏛️ Cross-File Architecture Graph
-A persistent knowledge graph tracks imports and function calls across your entire project. This enables precise "Jump to Definition" and "Find References" that work reliably across many files.
+A persistent knowledge graph tracks imports and function calls across your entire project. This enables precise "Jump to Definition" and "Find References" that work reliably across many files, including advanced structural tracking for Dart widget instantiations and Python dependency injection (`Depends()`).
 
 ---
 
-### 🛡️ Security Hardened
-Independently audited and remediated against OWASP Top 10 vulnerabilities. Includes robust sanitization for vector filters, safe JSON-based serialization, and strict path containment to prevent traversal attacks.
+### 🛡️ Security & Quality Hardened
+Independently audited and remediated against OWASP Top 10 vulnerabilities. Includes robust sanitization for vector filters, safe JSON-based serialization, and strict path containment. The codebase has also undergone a comprehensive quality review with an established remediation backlog.
 
 ---
 
@@ -42,7 +42,7 @@ These tools are specifically designed to give Cloud-based AI agents "Just-in-Tim
 | `search_code` | **Token Saver**: Feeds the AI only the specific logic it needs to solve a task. |
 | `get_stats` | **Strategic Overview**: Identifies "Dependency Hubs" (critical files) and "High-Risk" areas without the AI needing to read every file. |
 | `find_definition` | **Precise Navigation**: Allows the AI to jump straight to the source of any mystery function or variable. |
-| `find_references` | **Impact Analysis**: Helps the AI understand the side-effects of a change before it happens. |
+| `find_references` | **Impact Analysis**: Helps the AI understand the side-effects of a change before it happens. Includes advanced mapping for UI frameworks and backend routing. |
 | `refresh_index` | **Real-time Sync**: Keeps the AI's internal "map" of your project up to date with your latest changes. |
 
 ---
