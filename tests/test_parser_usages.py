@@ -61,6 +61,9 @@ def get_users(db = Depends(get_db_session)):
     assert "Depends" in usage_names
     assert "get_db_session" in usage_names
 
+    db_session_usage = next(u for u in users_chunk.usages if u.name == "get_db_session")
+    assert db_session_usage.context == "dependency_injection"
+
 def test_extract_js_usages(parser, tmp_path):
     code = """
 function main() {
@@ -92,6 +95,7 @@ class Processor {
     print('Processing');
     var data = fetchData();
     final user = User(name: 'Alice');
+    final Widget w = MyWidget();
   }
 }
 """
@@ -104,6 +108,6 @@ class Processor {
     usage_names = [u.name for u in process_chunk.usages]
     assert "print" in usage_names
     assert "fetchData" in usage_names
-    # User constructor might vary slightly depending on grammar
-    # usually constructor_name -> type_name -> type_identifier
     assert "User" in usage_names
+    assert "MyWidget" in usage_names
+    assert "Widget" in usage_names

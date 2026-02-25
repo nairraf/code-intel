@@ -406,15 +406,40 @@ class CodeParser:
 
         if lang == "python":
             query = Query(language, """
-                (import_statement (dotted_name) @name)
-                (import_statement (aliased_import name: (dotted_name) @name))
-                (import_from_statement module_name: (dotted_name) @name)
-                (import_from_statement module_name: (relative_import) @name)
+                (import_statement) @import
+                (import_from_statement) @import_from
             """)
             captures = QueryCursor(query).captures(root_node)
             for tag, nodes in captures.items():
                 for node in nodes:
-                    deps.add(node.text.decode("utf-8", errors="replace"))
+                    if tag == "import":
+                        for child in node.children:
+                            if child.type == "dotted_name":
+                                deps.add(child.text.decode("utf-8", errors="replace"))
+                            elif child.type == "aliased_import":
+                                name_node = child.child_by_field_name("name")
+                                if name_node: deps.add(name_node.text.decode("utf-8", errors="replace"))
+                    elif tag == "import_from":
+                        module_name = node.child_by_field_name("module_name")
+                        mod_str = ""
+                        if module_name:
+                            mod_str = module_name.text.decode("utf-8", errors="replace")
+                            deps.add(mod_str)
+                        else:
+                            # It could be a relative import like `from . import foo`
+                            # In tree-sitter python, the node might have no module_name child
+                            # but children will be `.`, `foo`
+                            pass # We can improve this if needed, but for now stick to named modules
+
+                        if mod_str:
+                            for child in node.children:
+                                if child.type == "dotted_name" and child != module_name:
+                                    sym_str = child.text.decode("utf-8", errors="replace")
+                                    deps.add(f"{mod_str}::{sym_str}")
+                                elif child.type == "aliased_import":
+                                    name_node = child.child_by_field_name("name")
+                                    if name_node:
+                                        deps.add(f"{mod_str}::{name_node.text.decode('utf-8', errors='replace')}")
                 
         elif lang == "dart":
             query = Query(language, "(string_literal) @path")
@@ -531,6 +556,8 @@ class CodeParser:
             "dart": """
                 (annotation name: (identifier) @name)
                 ((identifier) @name . (selector))
+                ((identifier) @name . (arguments))
+                (type_identifier) @name
             """
         }
         
@@ -542,15 +569,26 @@ class CodeParser:
             query = Query(language, query_str)
             captures = QueryCursor(query).captures(root_node)
             
+            def determine_context(node, lang):
+                context = "call"
+                if node.parent:
+                    if node.parent.type == "new_expression" or node.parent.type == "constructor_name":
+                        context = "instantiation"
+                    elif lang == "python" and node.parent.type == "argument_list":
+                        call_node = node.parent.parent
+                        if call_node and call_node.type == "call":
+                            func_node = call_node.child_by_field_name("function")
+                            if func_node and func_node.text.decode("utf-8", errors="replace") == "Depends":
+                                context = "dependency_injection"
+                return context
+            
             # Handle list of tuples (node, name) - standard tree-sitter
             if isinstance(captures, list):
                  for node, tag in captures:
+                    if tag != "name": continue
                     name = node.text.decode("utf-8", errors="replace")
                     start_point = node.start_point
-                    
-                    context = "call"
-                    if node.parent.type == "new_expression" or node.parent.type == "constructor_name":
-                       context = "instantiation"
+                    context = determine_context(node, lang)
                     
                     usages.append(SymbolUsage(
                         name=name,
@@ -562,15 +600,11 @@ class CodeParser:
             # Handle dict {name: [nodes]} - legacy/other bindings
             elif isinstance(captures, dict):
                 for tag, nodes in captures.items():
+                    if tag != "name" and tag != "imported_name": continue
                     for node in nodes:
                         name = node.text.decode("utf-8", errors="replace")
-                        # Usage location
                         start_point = node.start_point
-                        
-                        # Context inference (simplified)
-                        context = "call"
-                        if node.parent.type == "new_expression" or node.parent.type == "constructor_name":
-                           context = "instantiation"
+                        context = determine_context(node, lang)
                         
                         usages.append(SymbolUsage(
                             name=name,
