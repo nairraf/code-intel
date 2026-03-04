@@ -101,13 +101,13 @@ async def test_language_scoped_definition(tmp_path):
     mock_ctx.parser.parse_file.return_value = []  # Force fallback to global search
 
     result_py = await find_definition_impl(
-        str(py_file), 1, mock_ctx, "Settings", root_path=str(project_root)
+        str(py_file), 1, "Settings", str(project_root), mock_ctx
     )
     first_line = result_py.split("\n")[0]
     assert "config.py" in first_line
 
     result_dart = await find_definition_impl(
-        str(dart_file), 1, mock_ctx, "Settings", root_path=str(project_root)
+        str(dart_file), 1, "Settings", str(project_root), mock_ctx
     )
     first_line = result_dart.split("\n")[0]
     assert "main.dart" in first_line

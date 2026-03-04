@@ -66,11 +66,11 @@ class EmbeddingCache:
                 row = cursor.fetchone()
                 
                 if row:
-                    # Update last_accessed with timezone-aware datetime
-                    now = datetime.now(timezone.utc)
+                    # Update last_accessed with ISO string for Python 3.12+ compatibility
+                    now_str = datetime.now(timezone.utc).isoformat()
                     conn.execute(
                         "UPDATE embeddings SET last_accessed = ? WHERE hash = ?",
-                        (now, text_hash)
+                        (now_str, text_hash)
                     )
                     
                     # Migration logic for legacy pickle data
@@ -96,7 +96,7 @@ class EmbeddingCache:
         text_hash = self._compute_hash(text, model)
         try:
             blob = json.dumps(vector).encode('utf-8')
-            now = datetime.now(timezone.utc)
+            now_str = datetime.now(timezone.utc).isoformat()
             with sqlite3.connect(self.db_path) as conn:
                 try:
                     conn.execute(
@@ -104,7 +104,7 @@ class EmbeddingCache:
                         INSERT OR REPLACE INTO embeddings (hash, vector, model, created_at, last_accessed)
                         VALUES (?, ?, ?, ?, ?)
                         """,
-                        (text_hash, blob, model, now, now)
+                        (text_hash, blob, model, now_str, now_str)
                     )
                 except sqlite3.OperationalError as e:
                     if "no such table: embeddings" in str(e):
@@ -117,7 +117,7 @@ class EmbeddingCache:
                                 INSERT OR REPLACE INTO embeddings (hash, vector, model, created_at, last_accessed)
                                 VALUES (?, ?, ?, ?, ?)
                                 """,
-                                (text_hash, blob, model, now, now)
+                                (text_hash, blob, model, now_str, now_str)
                             )
                         return
                     raise

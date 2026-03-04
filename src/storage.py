@@ -80,9 +80,7 @@ class VectorStore:
             try:
                 all_tables = self.db.list_tables()
                 if table_name not in all_tables:
-                    # Double check via table_names
-                    if table_name not in self.db.table_names():
-                        self.db.create_table(table_name, schema=self._get_schema())
+                    self.db.create_table(table_name, schema=self._get_schema())
             except Exception as e:
                 # If it already exists, just ignore and open it
                 if "already exists" not in str(e).lower():
@@ -246,17 +244,22 @@ class VectorStore:
         """Wipes the database table for a specific project."""
         table_name = self._get_table_name(project_root)
         try:
+            # Pop Handle first to prevent stale writes/caching.
+            self._tables.pop(table_name, None)
+            
+            # Use delete("1=1") first to be safe, then try to drop.
+            # In some environments drop_table might be soft or delayed.
+            try:
+                table = self.db.open_table(table_name)
+                table.delete("1=1")
+            except:
+                pass
+                
             all_tables = self.db.list_tables()
             if table_name in all_tables:
                 self.db.drop_table(table_name)
-        except Exception:
-            # Fallback for older LanceDB or if list_tables fails
-            try:
-                if table_name in self.db.table_names():
-                    self.db.drop_table(table_name)
-            except:
-                pass
-        self._tables.pop(table_name, None)
+        except Exception as e:
+            logger.warning(f"Failed to clear project {project_root}: {e}")
 
     def count_chunks(self, project_root: str) -> int:
         """Returns the total number of chunks for a project."""
