@@ -17,17 +17,12 @@ logger = logging.getLogger(__name__)
 def _sanitize_filter_value(value: str) -> str:
     """
     Escapes a string value for safe inclusion in LanceDB SQL-like filters.
-    Doubles internal quotes and validates against injection patterns.
+    Doubles internal quotes.
     """
     if not isinstance(value, str):
         value = str(value)
     # Escape internal double quotes
     escaped = value.replace('"', '""')
-    # Reject values containing SQL keywords that shouldn't appear in identifiers
-    # This is defense-in-depth; the escaping above should be sufficient
-    dangerous_patterns = re.compile(r'\b(OR|AND|DROP|DELETE|INSERT|UPDATE|UNION|;)\b', re.IGNORECASE)
-    if dangerous_patterns.search(escaped):
-        raise ValueError(f"Potentially dangerous filter value rejected: {value!r}")
     return escaped
 
 class VectorStore:

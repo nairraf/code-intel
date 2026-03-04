@@ -152,12 +152,17 @@ async def refresh_index_impl(
     just_filepaths = [f[0] for f in files_to_process]
     git_info = await batch_get_git_info(just_filepaths, project_root_str)
 
+    parse_cache = {}
+
     # --- Pass 1: Index definitions & generate embeddings ---
     async def process_file_pass1(filepath: str, file_hash: str):
         try:
             chunks = ctx.parser.parse_file(filepath, project_root=project_root_str)
             if not chunks:
                 return 0
+            
+            parse_cache[filepath] = chunks
+
             file_git = git_info.get(filepath, {"author": None, "last_modified": None})
             for chunk in chunks:
                 chunk.author = file_git.get("author")
@@ -189,7 +194,10 @@ async def refresh_index_impl(
     # All Pass 1 definitions must be committed before we resolve edges.
     async def process_file_pass2(filepath: str):
         try:
-            chunks = ctx.parser.parse_file(filepath, project_root=project_root_str)
+            chunks = parse_cache.get(filepath)
+            if chunks is None:
+                chunks = ctx.parser.parse_file(filepath, project_root=project_root_str)
+                
             if not chunks:
                 return
             for chunk in chunks:

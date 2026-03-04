@@ -177,60 +177,25 @@ class CodeParser:
         return self._recursive_chunk(node, full_content, filepath, lang_name, target_types, parent_name=None)
 
     def _recursive_chunk(self, node: Node, content: str, filepath: str, lang: str, targets: set, parent_name: Optional[str] = None) -> List[CodeChunk]:
-        # print(f"[DEBUG] Visit: {node.type}")
+        from .scoping import get_scoping_strategy
+        
         chunks = []
-        # Capture current node if it matches
         if node.type in targets:
-            # Scope Check: For assignments/declarations, only index if they are at the top level
-            # python assignments are children of expression_statement, whose parent is module
-            # dart declarations are direct children of program
-            is_global = False
-            if lang == "python":
-                if node.type == "assignment":
-                    if node.parent and node.parent.type == "expression_statement":
-                        if node.parent.parent and node.parent.parent.type == "module":
-                            is_global = True
-                elif node.type in ("expression_statement", "call"):
-                    # Only index top-level expressions/calls
-                    curr = node
-                    while curr.parent:
-                        curr = curr.parent
-                    if curr.type == "module" and (node.parent.type == "module" if node.type == "expression_statement" else node.parent.type == "expression_statement" and node.parent.parent.type == "module"):
-                         is_global = True
-                
-                if not is_global and node.type in ("assignment", "expression_statement", "call"):
-                    for child in node.children:
-                        chunks.extend(self._recursive_chunk(child, content, filepath, lang, targets, parent_name=parent_name))
-                    return chunks
-
-            if lang == "dart":
-                if node.type in ("static_final_declaration_list", "initialized_identifier_list", "declaration"):
-                    if node.parent and node.parent.type == "program":
-                        is_global = True
-                elif node.type in ("expression_statement", "call"):
-                     # Top-level Dart calls
-                     if node.parent.type == "program" if node.type == "expression_statement" else node.parent.type == "expression_statement" and node.parent.parent.type == "program":
-                         is_global = True
-
-                if not is_global and node.type in ("static_final_declaration_list", "initialized_identifier_list", "declaration", "expression_statement", "call"):
-                    for child in node.children:
-                        chunks.extend(self._recursive_chunk(child, content, filepath, lang, targets, parent_name=parent_name))
-                    return chunks
-
-            # print(f"[DEBUG] Matched target: {node.type}")
-            start_byte = node.start_byte
-            end_byte = node.end_byte
-            # --- Dart Special Handling ---
-            usage_node = node
-            if lang == 'dart' and (node.type == 'function_signature' or node.type == 'method_signature'):
-                sib = node.next_named_sibling
-                if sib and sib.type == 'function_body':
-                    end_byte = sib.end_byte
-                    usage_node = sib
+            strategy = get_scoping_strategy(lang)
+            is_global = strategy.is_global_target(node)
             
-            # --- Python Special Handling ---
-            if lang == 'python' and node.parent and node.parent.type == 'decorated_definition':
-                usage_node = node.parent
+            # If it's one of the globally-scoped node types but not at global scope, recurse and abort
+            global_types = {
+                "python": {"assignment", "expression_statement", "call"},
+                "dart": {"static_final_declaration_list", "initialized_identifier_list", "declaration", "expression_statement", "call"}
+            }
+            if not is_global and lang in global_types and node.type in global_types[lang]:
+                for child in node.children:
+                    chunks.extend(self._recursive_chunk(child, content, filepath, lang, targets, parent_name=parent_name))
+                return chunks
+
+            start_byte = node.start_byte
+            end_byte, usage_node = strategy.get_special_handling(node)
             
             text = content.encode('utf-8')[start_byte:end_byte].decode('utf-8', errors='replace')
             meta = self._extract_node_metadata(node, lang, content)
@@ -251,19 +216,20 @@ class CodeParser:
                 complexity=complexity,
                 usages=usages
             )
-            if lang == 'dart' and (node.type == 'function_signature' or node.type == 'method_signature'):
+            # Fix line tracking for Dart split nodes
+            if lang == 'dart' and node.type in ('function_signature', 'method_signature'):
                 sib = node.next_named_sibling
                 if sib and sib.type == 'function_body':
                     chunk.end_line = sib.end_point[0] + 1
             chunks.append(chunk)
-            # If it's a class-like node, recurse children with this class as parent
+
             if "class" in node.type or "impl" in node.type or "trait" in node.type:
                 for child in node.children:
                     chunks.extend(self._recursive_chunk(child, content, filepath, lang, targets, parent_name=meta.get("symbol_name")))
                 return chunks
-            # If function/method, don't recurse into children
             if "function" in node.type or "method" in node.type:
                 return chunks
+
         for child in node.children:
             chunks.extend(self._recursive_chunk(child, content, filepath, lang, targets, parent_name=parent_name))
         return chunks
@@ -582,36 +548,28 @@ class CodeParser:
                                 context = "dependency_injection"
                 return context
             
-            # Handle list of tuples (node, name) - standard tree-sitter
+            # Normalize captures to a list of (node, tag) tuples
+            normalized_captures = []
             if isinstance(captures, list):
-                 for node, tag in captures:
-                    if tag != "name": continue
-                    name = node.text.decode("utf-8", errors="replace")
-                    start_point = node.start_point
-                    context = determine_context(node, lang)
-                    
-                    usages.append(SymbolUsage(
-                        name=name,
-                        line=start_point[0] + 1,
-                        character=start_point[1],
-                        context=context
-                    ))
-            
-            # Handle dict {name: [nodes]} - legacy/other bindings
+                normalized_captures = captures
             elif isinstance(captures, dict):
                 for tag, nodes in captures.items():
-                    if tag != "name" and tag != "imported_name": continue
                     for node in nodes:
-                        name = node.text.decode("utf-8", errors="replace")
-                        start_point = node.start_point
-                        context = determine_context(node, lang)
-                        
-                        usages.append(SymbolUsage(
-                            name=name,
-                            line=start_point[0] + 1,
-                            character=start_point[1],
-                            context=context
-                        ))
+                        normalized_captures.append((node, tag))
+
+            for node, tag in normalized_captures:
+                if tag not in ("name", "imported_name"):
+                    continue
+                name = node.text.decode("utf-8", errors="replace")
+                start_point = node.start_point
+                context = determine_context(node, lang)
+                
+                usages.append(SymbolUsage(
+                    name=name,
+                    line=start_point[0] + 1,
+                    character=start_point[1],
+                    context=context
+                ))
         except Exception:
             pass
             

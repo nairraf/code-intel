@@ -38,6 +38,7 @@ class AppContext:
     async def close(self) -> None:
         """Release any resources held by services (e.g. HTTP connections)."""
         await self.ollama.aclose()
+        self.knowledge_graph.close()
 
 
 # Module-level singleton — lazily initialised on first call to get_context().

@@ -9,17 +9,28 @@ from pathlib import Path
 sys.path.append(os.getcwd())
 
 # Import our implementation modules
-from src.server import refresh_index_impl, search_code_impl, get_stats_impl
+from src.indexer import refresh_index_impl
+from src.tools.search import search_code_impl
+from src.tools.stats import get_stats_impl
+from src.context import get_context
+from src.server import INFERENCE_SEMAPHORE, FILE_PROCESSING_SEMAPHORE
 from src.config import CACHE_DB_PATH
 
 async def run_benchmark_cycle(label: str):
     print(f"\n--- Starting Benchmark: {label} ---")
     start_total = time.time()
+    ctx = get_context()
 
     # 1. Full Index Sync
     print("Step 1: Full Sync (force_full_scan=True)...")
     start = time.time()
-    sync_result = await refresh_index_impl(root_path=".", force_full_scan=True)
+    sync_result = await refresh_index_impl(
+        root_path=".", 
+        force_full_scan=True,
+        ctx=ctx,
+        inference_semaphore=INFERENCE_SEMAPHORE,
+        file_semaphore=FILE_PROCESSING_SEMAPHORE
+    )
     duration_sync = time.time() - start
     print(f"   Sync took: {duration_sync:.2f}s")
     # print(sync_result)
@@ -29,14 +40,14 @@ async def run_benchmark_cycle(label: str):
     queries = ["VectorStore implementation", "fastmcp server core", "sqlite cache logic"]
     start = time.time()
     for q in queries:
-        await search_code_impl(q, root_path=".")
+        await search_code_impl(q, root_path=".", ctx=ctx)
     duration_search = time.time() - start
     print(f"   Searching {len(queries)} terms took: {duration_search:.2f}s")
 
     # 3. Stats Validation
     print("Step 3: Stats Validation...")
     start = time.time()
-    await get_stats_impl(root_path=".")
+    await get_stats_impl(root_path=".", ctx=ctx)
     duration_stats = time.time() - start
     print(f"   Stats retrieval took: {duration_stats:.2f}s")
 
