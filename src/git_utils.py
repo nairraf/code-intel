@@ -119,6 +119,7 @@ async def batch_get_git_info(filepaths: list, repo_root: str) -> Dict[str, Dict[
 
 async def get_active_branch(repo_root: str) -> str:
     """Get the current active branch name."""
+    process = None
     try:
         abs_repo = str(Path(repo_root).resolve())
         if not os.path.isdir(abs_repo):
@@ -142,12 +143,22 @@ async def get_active_branch(repo_root: str) -> str:
             return "unknown"
     except asyncio.TimeoutError:
         logger.warning(f"Git branch lookup timed out for {repo_root}")
-        try:
-            process.kill()
-            await asyncio.wait_for(process.wait(), timeout=1)
-        except:
-            pass
+        if process:
+            try:
+                process.kill()
+                await asyncio.wait_for(process.wait(), timeout=1)
+            except:
+                pass
         return "unknown"
     except Exception as e:
         logger.error(f"Error in get_active_branch: {e}")
         return "unknown"
+    finally:
+        # Final safety to prevent unawaited process warnings
+        if process and process.returncode is None:
+            try:
+                process.kill()
+                await process.wait()
+            except:
+                pass
+    return "unknown"

@@ -59,7 +59,16 @@ async def test_is_git_repo_timeout_fallback(mocker):
         git_dir.mkdir()
         
         # Mock asyncio.wait_for to raise TimeoutError
-        mocker.patch("asyncio.wait_for", side_effect=asyncio.TimeoutError)
+        # Use a real wrapper to avoid "never awaited" warnings
+        async def mock_wait_for(coro, timeout):
+            # We must close the coro to avoid "never awaited" warnings
+            try:
+                coro.close()
+            except:
+                pass
+            raise asyncio.TimeoutError()
+            
+        mocker.patch("asyncio.wait_for", side_effect=mock_wait_for)
         
         # Should return True because .git directory exists
         assert await is_git_repo(tmpdir)
@@ -71,7 +80,10 @@ async def test_is_git_repo_timeout_no_fallback(mocker):
         # No .git directory
         
         # Mock asyncio.wait_for to raise TimeoutError
-        mocker.patch("asyncio.wait_for", side_effect=asyncio.TimeoutError)
+        async def mock_wait_for(coro, timeout):
+            raise asyncio.TimeoutError()
+            
+        mocker.patch("asyncio.wait_for", side_effect=mock_wait_for)
         
         # Should return False because no .git directory
         assert not await is_git_repo(tmpdir)

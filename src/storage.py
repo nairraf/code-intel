@@ -50,15 +50,14 @@ class VectorStore:
         # Robustly check for table existence
         try:
             all_tables = self.db.list_tables()
-            if not isinstance(all_tables, list):
-                all_tables = getattr(all_tables, "tables", [])
-            
             if table_name not in all_tables:
-                # Also fall back to table_names() for maximum compatibility despite the deprecation warning
-                if table_name not in self.db.table_names():
-                    return None
+                return None
         except Exception:
-             if table_name not in self.db.table_names():
+             # Final fallback for some LanceDB versions
+             try:
+                 if table_name not in self.db.table_names():
+                     return None
+             except:
                  return None
                  
         table = self.db.open_table(table_name)
@@ -70,7 +69,8 @@ class VectorStore:
         if table_name in self._tables:
             return self._tables[table_name]
             
-        if table_name not in self.db.table_names():
+        all_tables = self.db.list_tables()
+        if table_name not in all_tables:
             self.db.create_table(table_name, schema=self._get_schema())
         
         table = self.db.open_table(table_name)
@@ -226,8 +226,17 @@ class VectorStore:
     def clear_project(self, project_root: str):
         """Wipes the database table for a specific project."""
         table_name = self._get_table_name(project_root)
-        if table_name in self.db.table_names():
-            self.db.drop_table(table_name)
+        try:
+            all_tables = self.db.list_tables()
+            if table_name in all_tables:
+                self.db.drop_table(table_name)
+        except Exception:
+            # Fallback for older LanceDB or if list_tables fails
+            try:
+                if table_name in self.db.table_names():
+                    self.db.drop_table(table_name)
+            except:
+                pass
         self._tables.pop(table_name, None)
 
     def count_chunks(self, project_root: str) -> int:
@@ -307,7 +316,7 @@ class VectorStore:
         dep_hubs = Counter(dependency_list).most_common(5)
         
         test_gaps = []
-        stale_count = 0
+        stale_count: int = 0
         now = datetime.now(timezone.utc)
         
         for i in range(len(data)):
@@ -323,7 +332,7 @@ class VectorStore:
                     "complexity": int(complexities[i]),
                     "file": filenames[i]
                 })
-
+ 
             # Stale File check: modified > 30 days ago
             last_mod = data.column("last_modified")[i].as_py()
             if last_mod:
