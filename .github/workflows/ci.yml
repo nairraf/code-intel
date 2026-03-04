@@ -37,13 +37,21 @@ jobs:
     - name: Install dependencies
       run: uv sync --all-extras --dev
 
+    - name: Wait for Ollama
+      run: |
+        for i in {1..10}; do
+          curl -s http://localhost:11434/api/tags && break || sleep 5
+        done
+
     - name: Pull Jina Embedding Model
       run: |
         curl -X POST http://localhost:11434/api/pull -d '{"name": "unclemusclez/jina-embeddings-v2-base-code"}'
 
     - name: Run tests with coverage
+      env:
+        EMBEDDING_MODEL: "unclemusclez/jina-embeddings-v2-base-code"
       run: |
-        uv run pytest --cov=src --cov-report=xml
+        uv run pytest tests/ -vv --cov=src --cov-report=xml
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
