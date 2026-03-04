@@ -256,25 +256,25 @@ Simple copy-paste artifact.
 
 | # | Finding | Severity | Effort | Impact | Status (2026-02-24) |
 |---|---------|----------|--------|--------|---------------------|
-| 1 | Monolithic module `server.py` | 🔴 | Large | Testability, maintainability | ❌ Open — still 576 lines |
-| 2 | Duplicated sorting lambda ×5 | 🔴 | Small | DRY, bug risk | ❌ Open — 5 occurrences of `_get_file_priority` lambda remain |
-| 3 | Global singleton instantiation | 🔴 | Medium | Testability, lifecycle | ❌ Open — module-level globals unchanged |
+| 1 | Monolithic module `server.py` | 🔴 | Large | Testability, maintainability | ✅ **Fixed** — decomposed into sub-modules |
+| 2 | Duplicated sorting lambda ×5 | 🔴 | Small | DRY, bug risk | ✅ **Fixed** — extracted to `_rank_chunk_key` |
+| 3 | Global singleton instantiation | 🔴 | Medium | Testability, lifecycle | ✅ **Fixed** — implemented `AppContext` DI |
 | 4 | SQLite connection-per-call | 🟡 | Small | Performance | ❌ Open — `knowledge_graph.py` still opens new connection every call |
 | 5 | Pass 2 re-parses all files | 🟡 | Medium | Performance | ❌ Open |
 | 6 | `_recursive_chunk` spaghetti | 🟡 | Medium | Readability, bug risk | ❌ Open — still ~90 lines, complexity 111 |
 | 7 | Dual capture format handling | 🟡 | Small | DRY, readability | ❌ Open — two branches still in `_extract_usages` |
-| 8 | Inline imports in hot paths | 🟡 | Trivial | Code clarity | ❌ Open — `server.py:244` (`re`), `storage.py:81,280` (`json`) |
+| 8 | Inline imports in hot paths | 🟡 | Trivial | Code clarity | ✅ **Fixed** |
 | 9 | Bare/silent exception handling | 🟢 | Small | Debuggability | ✅ **Fixed** — bare `except:` in `storage.py` replaced with `except Exception:` |
-| 10 | Config fallback bug | 🟢 | Trivial | Correctness | ❌ Open — loop variable rebinding on `config.py:21` |
-| 11 | Repeated table-exists boilerplate | 🟢 | Small | DRY | ❌ Open |
-| 12 | Duplicate comment | 🟢 | Trivial | Cleanliness | ❌ Open — `server.py:529-530` |
+| 10 | Config fallback bug | 🟢 | Trivial | Correctness | ✅ **Fixed** |
+| 11 | Repeated table-exists boilerplate | 🟢 | Small | DRY | ✅ **Fixed** — extracted `_get_table_or_none` helper |
+| 12 | Duplicate comment | 🟢 | Trivial | Cleanliness | ✅ **Fixed** |
 
 ---
 
-## Re-audit: 2026-02-24
+## Re-audit: 2026-03-04
 
 > **Auditor:** Antigravity AI
-> **Trigger:** Post-reference-tracking-fix review to assess what changed
+> **Trigger:** Wave #2 Completion Review
 
 ### Key Findings
 
@@ -282,10 +282,11 @@ Simple copy-paste artifact.
 2. **Recent work focused on correctness, not structure.** The reference tracking improvements (Dart widget instantiation edges, Python `Depends()` context tagging) added value without touching the structural issues flagged here.
 3. **The tool is validated and working well.** An independent MCP evaluation (see `docs/feedback.md`) confirmed high-confidence results for Dart references, correct semantic search, and accurate definition lookups.
 
-### Decision: Active (Wave 1)
+### Decision: Active (Wave 3)
 
-**Wave 1 items (2, 8, 10, 11, 12) are now ACTIVE** for remediation.
-Items from Waves 2 and 3 remain **deferred**, as the tool delivers strong user value in its current form and none of these findings block functionality. The Wave 2/3 items should be revisited when:
+**Wave 1 items (2, 8, 10, 11, 12) and Wave 2 items (1, 3) are now COMPLETED.**
+Wave 3 items remain **deferred**. Wave 2 was completed on 2026-03-04 with 83% test coverage and full MCP verification.
+The Wave 3 items should be revisited when:
 
 - **Wave 1 triggers:** A contributor session with ~30 min of slack time. Items 2, 8, 10, 11, 12 are mechanical fixes with near-zero regression risk.
 - **Wave 2 triggers:** A decision to add significant new tool endpoints to `server.py`, or a need to write comprehensive unit tests against the server layer (DI becomes essential).
