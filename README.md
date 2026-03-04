@@ -3,7 +3,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP](https://img.shields.io/badge/MCP-Powered-orange.svg)](https://modelcontextprotocol.io)
-[![Coverage](https://img.shields.io/badge/coverage-83%25-green.svg)](https://github.com/nairraf/code-intel)
+[![Coverage](https://codecov.io/gh/nairraf/code-intel/graph/badge.svg)](https://codecov.io/gh/nairraf/code-intel)
 
 Give your AI agents a "brain" that actually understands your codebase. This Model Context Protocol (MCP) server provides high-performance semantic search and deep code insights, making it easier for AI tools to navigate, understand, and modify complex projects.
 
