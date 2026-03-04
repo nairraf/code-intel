@@ -17,10 +17,10 @@ logger = logging.getLogger("server")
 
 async def find_references_impl(
     symbol_name: str,
-    ctx: AppContext,
-    root_path: str = ".",
+    root_path: str,
+    ctx: AppContext
 ) -> str:
-    """Find all locations where *symbol_name* is called or used.
+    """Find all references to a symbol within the project.
 
     Strategy:
         1. Locate definition chunk(s) in the vector store.
@@ -28,13 +28,13 @@ async def find_references_impl(
         3. Fallback: direct usage search when symbol is external/unlinked.
     """
     try:
-        project_root = normalize_path(root_path)
+        project_root_str = normalize_path(root_path)
 
         # --- Strategy 1: Definition-anchored edge traversal ---
-        def_chunks = ctx.vector_store.find_chunks_by_symbol(project_root, symbol_name)
+        def_chunks = ctx.vector_store.find_chunks_by_symbol(project_root_str, symbol_name)
         if not def_chunks:
             # --- Fallback: direct usage search ---
-            usage_chunks = ctx.vector_store.find_chunks_with_usage(project_root, symbol_name)
+            usage_chunks = ctx.vector_store.find_chunks_with_usage(project_root_str, symbol_name)
             if not usage_chunks:
                 return f"Symbol '{symbol_name}' not found locally or in project usages."
 
@@ -52,7 +52,7 @@ async def find_references_impl(
             edges = ctx.knowledge_graph.get_edges(target_id=d["id"], type="call")
             for edge in edges:
                 source_id, _, _, meta = edge
-                source_chunk = ctx.vector_store.get_chunk_by_id(project_root, source_id)
+                source_chunk = ctx.vector_store.get_chunk_by_id(project_root_str, source_id)
                 if source_chunk:
                     match_type = meta.get("match_type", "unknown")
                     confidence = "High" if match_type == "explicit_import" else "Low"

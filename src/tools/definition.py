@@ -46,25 +46,19 @@ def _rank_chunk_key(chunk: dict, source_lang: Optional[str] = None):
 async def find_definition_impl(
     filename: str,
     line: int,
-    ctx: AppContext,
-    symbol_name: Optional[str] = None,
-    root_path: str = ".",
+    symbol_name: Optional[str],
+    root_path: str,
+    ctx: AppContext
 ) -> str:
-    """Locate the source-code definition for a symbol.
-
-    Strategy (in priority order):
-        1. AST-based resolution via the Knowledge Graph.
-        2. Global symbol-name search in the vector store.
-        3. Heuristic usage search as a last resort.
-    """
+    """Locate the definition of a symbol at a given file position."""
     try:
-        project_root = normalize_path(root_path)
-        filepath = normalize_path(filename)
-        source_lang = ctx.parser._get_language(filepath)
+        project_root_str = normalize_path(root_path)
+        filename = normalize_path(filename)
+        source_lang = ctx.parser._get_language(filename)
 
         # --- Strategy 1: AST + Knowledge Graph ---
         try:
-            chunks = ctx.parser.parse_file(filepath, project_root=project_root)
+            chunks = ctx.parser.parse_file(filename, project_root=project_root_str)
 
             target_chunk = None
             target_usages = []
@@ -97,7 +91,7 @@ async def find_definition_impl(
 
                     if target_edge:
                         _, target_id, _, _ = target_edge
-                        def_chunk = ctx.vector_store.get_chunk_by_id(project_root, target_id)
+                        def_chunk = ctx.vector_store.get_chunk_by_id(project_root_str, target_id)
                         if def_chunk:
                             resolved_definitions.append((usage.name, def_chunk))
 
@@ -118,7 +112,7 @@ async def find_definition_impl(
                             deduped_defs = [(symbol_name, dc) for dc in exact_matches]
                         else:
                             global_matches = ctx.vector_store.find_chunks_by_symbol(
-                                project_root, symbol_name
+                                project_root_str, symbol_name
                             )
                             if global_matches:
                                 global_matches.sort(
@@ -140,10 +134,10 @@ async def find_definition_impl(
 
         # --- Strategy 2: Global symbol-name search ---
         if symbol_name:
-            targets = ctx.vector_store.find_chunks_by_symbol(project_root, symbol_name)
+            targets = ctx.vector_store.find_chunks_by_symbol(project_root_str, symbol_name)
             if not targets:
                 # --- Strategy 3: Heuristic usage search ---
-                usage_chunks = ctx.vector_store.find_chunks_with_usage(project_root, symbol_name)
+                usage_chunks = ctx.vector_store.find_chunks_with_usage(project_root_str, symbol_name)
                 if usage_chunks:
                     usage_chunks.sort(
                         key=lambda x: _rank_chunk_key(x, source_lang), reverse=True

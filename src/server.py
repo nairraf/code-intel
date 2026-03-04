@@ -19,6 +19,7 @@ def safe_print(*args, **kwargs):
 
 
 from .config import LOG_DIR
+from .utils import normalize_path
 from .context import get_context
 from .indexer import refresh_index_impl
 from .tools.definition import find_definition_impl
@@ -86,8 +87,9 @@ async def refresh_index(
         include: Optional glob pattern to ONLY index matching files (e.g., 'src/api/**').
         exclude: Optional glob pattern to SKIP matching files (e.g., 'tests/**').
     """
+    norm_root = normalize_path(root_path)
     return await refresh_index_impl(
-        root_path, force_full_scan, include, exclude,
+        norm_root, force_full_scan, include, exclude,
         ctx=_get_ctx(),
         inference_semaphore=INFERENCE_SEMAPHORE,
         file_semaphore=FILE_PROCESSING_SEMAPHORE,
@@ -120,7 +122,8 @@ async def search_code(
         include: Optional glob pattern to ONLY return matches from specific files (e.g. 'src/**').
         exclude: Optional glob pattern to HIDE matches from specific files (e.g. 'tests/**').
     """
-    return await search_code_impl(query, _get_ctx(), root_path, limit, include, exclude)
+    norm_root = normalize_path(root_path)
+    return await search_code_impl(query, _get_ctx(), norm_root, limit, include, exclude)
 
 
 @mcp.tool()
@@ -137,7 +140,8 @@ async def get_stats(root_path: str = ".") -> str:
     Args:
         root_path: Project root directory to analyze.
     """
-    return await get_stats_impl(root_path, _get_ctx())
+    norm_root = normalize_path(root_path)
+    return await get_stats_impl(norm_root, _get_ctx())
 
 
 @mcp.tool()
@@ -165,7 +169,9 @@ async def find_definition(
         symbol_name: The exact name of the function, class, or variable to find.
         root_path: Project root for context.
     """
-    return await find_definition_impl(filename, line, _get_ctx(), symbol_name, root_path)
+    norm_root = normalize_path(root_path)
+    norm_file = normalize_path(filename)
+    return await find_definition_impl(norm_file, line, symbol_name, norm_root, _get_ctx())
 
 
 @mcp.tool()
@@ -185,7 +191,8 @@ async def find_references(symbol_name: str, root_path: str = ".") -> str:
         symbol_name: The exact name of the symbol to track references for.
         root_path: Project root context.
     """
-    return await find_references_impl(symbol_name, _get_ctx(), root_path)
+    norm_root = normalize_path(root_path)
+    return await find_references_impl(symbol_name, norm_root, _get_ctx())
 
 
 if __name__ == "__main__":

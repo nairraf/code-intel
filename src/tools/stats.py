@@ -12,18 +12,16 @@ from pathlib import Path
 from ..context import AppContext
 from ..git_utils import get_active_branch
 
+from ..utils import normalize_path
+
 logger = logging.getLogger("server")
 
 
 async def get_stats_impl(root_path: str = ".", ctx: AppContext = None) -> str:
     """Return a high-level health report for the indexed project.
-
-    Includes language breakdown, complexity metrics, dependency hubs,
-    test-coverage gaps, and project pulse (branch + stale files).
     """
     try:
-        root = Path(root_path).resolve()
-        project_root_str = str(root)
+        project_root_str = normalize_path(root_path)
 
         if ctx is None or ctx.vector_store is None:
             return "Error: Vector store not initialized."

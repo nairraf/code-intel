@@ -11,6 +11,7 @@ from pathlib import Path
 
 from ..context import AppContext
 from ..indexer import _should_process_file
+from ..utils import normalize_path
 
 logger = logging.getLogger("server")
 
@@ -23,15 +24,9 @@ async def search_code_impl(
     include: str = None,
     exclude: str = None,
 ) -> str:
-    """Semantic search with hybrid keyword recall boost.
-
-    When the query contains highly specific terms (acronyms, long words) a
-    supplementary keyword scan is performed and merged into the result set to
-    improve recall for technical queries.
-    """
+    """Perform a semantic search and return a formatted results string."""
     try:
-        root = Path(root_path).resolve()
-        project_root_str = str(root)
+        project_root_str = normalize_path(root_path)
 
         # Fetch more candidates when filtering is active so we still return `limit` results.
         fetch_limit = limit * 5 if (include or exclude) else limit
