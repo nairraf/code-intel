@@ -282,10 +282,10 @@ Simple copy-paste artifact.
 2. **Recent work focused on correctness, not structure.** The reference tracking improvements (Dart widget instantiation edges, Python `Depends()` context tagging) added value without touching the structural issues flagged here.
 3. **The tool is validated and working well.** An independent MCP evaluation (see `docs/feedback.md`) confirmed high-confidence results for Dart references, correct semantic search, and accurate definition lookups.
 
-### Decision: Completed (Wave 3)
+### Decision: Completed (Wave 4)
 
-**All Wave 1, Wave 2, and Wave 3 items are now COMPLETED.**
-Wave 3 was completed on 2026-03-04 with 85% test coverage and significant indexing speedups.
+**All Wave 1, Wave 2, Wave 3, and Wave 4 items are now COMPLETED.**
+Wave 4 was completed on 2026-03-04, addressing the final performance bottlenecks in LanceDB table management and SQLite write transactions.
 
 ---
 
@@ -294,3 +294,4 @@ Wave 3 was completed on 2026-03-04 with 85% test coverage and significant indexi
 1. **Wave 1 — Quick wins (~30 min)** (items 2, 8, 10, 11, 12): ✅ **Completed**
 2. **Wave 2 — `server.py` decomposition** (items 1, 3): ✅ **Completed**
 3. **Wave 3 — Performance & complexity** (items 4, 5, 6, 7): ✅ **Completed**
+4. **Wave 4 — Efficiency & Scaling** (LanceDB caching, SQLite Transactions): ✅ **Completed**

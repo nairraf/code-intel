@@ -31,6 +31,7 @@ class VectorStore:
     def __init__(self, uri: str = LANCEDB_URI):
         self.db = lancedb.connect(uri)
         self.embedding_dims = EMBEDDING_DIMENSIONS
+        self._tables = {}
 
     def _get_table_name(self, project_root: str) -> str:
         """Generates a stable, unique table name for a given project root."""
@@ -42,6 +43,10 @@ class VectorStore:
         """Helper to safely fetch a table or None if it doesn't exist."""
         table_name = self._get_table_name(project_root)
         
+        # Check cache first
+        if table_name in self._tables:
+            return self._tables[table_name]
+
         # Robustly check for table existence
         try:
             all_tables = self.db.list_tables()
@@ -56,7 +61,25 @@ class VectorStore:
              if table_name not in self.db.table_names():
                  return None
                  
-        return self.db.open_table(table_name)
+        table = self.db.open_table(table_name)
+        self._tables[table_name] = table
+        return table
+
+    def _ensure_table(self, table_name: str):
+        """Creates the table if it doesn't exist."""
+        if table_name in self._tables:
+            return self._tables[table_name]
+            
+        if table_name not in self.db.table_names():
+            self.db.create_table(table_name, schema=self._get_schema())
+        
+        table = self.db.open_table(table_name)
+        self._tables[table_name] = table
+        return table
+
+    def clear_caches(self):
+        """Resets the internal table handle cache."""
+        self._tables = {}
 
     def _get_schema(self):
         """Returns the standard schema for code chunk tables."""
@@ -82,11 +105,6 @@ class VectorStore:
             pa.field("vector", pa.list_(pa.float32(), self.embedding_dims)),
         ])
 
-    def _ensure_table(self, table_name: str):
-        """Creates the table if it doesn't exist."""
-        if table_name not in self.db.table_names():
-            self.db.create_table(table_name, schema=self._get_schema())
-        return self.db.open_table(table_name)
 
     def upsert_chunks(self, project_root: str, chunks: List[CodeChunk], vectors: List[List[float]]):
         """Inserts or updates chunks into a project-specific table."""
@@ -210,6 +228,7 @@ class VectorStore:
         table_name = self._get_table_name(project_root)
         if table_name in self.db.table_names():
             self.db.drop_table(table_name)
+        self._tables.pop(table_name, None)
 
     def count_chunks(self, project_root: str) -> int:
         """Returns the total number of chunks for a project."""

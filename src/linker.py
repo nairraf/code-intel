@@ -117,5 +117,6 @@ class SymbolLinker:
                             "line": usage.line,
                             "character": usage.character,
                             "match_type": match_type
-                        }
+                        },
+                        auto_commit=False
                     )

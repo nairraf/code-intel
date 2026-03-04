@@ -46,7 +46,7 @@ class KnowledgeGraph:
         except Exception as e:
             logger.error(f"Failed to initialize knowledge graph at {self.db_path}: {e}")
 
-    def add_edge(self, source_id: str, target_id: str, type: str, metadata: Dict = None):
+    def add_edge(self, source_id: str, target_id: str, type: str, metadata: Dict = None, auto_commit: bool = True):
         """Adds a relationship edge."""
         try:
             meta_json = json.dumps(metadata) if metadata else "{}"
@@ -58,9 +58,26 @@ class KnowledgeGraph:
                 """,
                 (source_id, target_id, type, meta_json)
             )
-            conn.commit()
+            if auto_commit:
+                conn.commit()
         except Exception as e:
             logger.error(f"Failed to add edge {source_id} -> {target_id}: {e}")
+
+    def begin_transaction(self):
+        """Starts a manual transaction."""
+        try:
+            conn = self._get_conn()
+            conn.execute("BEGIN TRANSACTION")
+        except Exception as e:
+            logger.error(f"Failed to begin transaction: {e}")
+
+    def commit_transaction(self):
+        """Commits a manual transaction."""
+        try:
+            conn = self._get_conn()
+            conn.commit()
+        except Exception as e:
+            logger.error(f"Failed to commit transaction: {e}")
 
     def get_edges(self, source_id: str = None, target_id: str = None, type: str = None) -> List[Tuple[str, str, str, Dict]]:
         """
@@ -93,12 +110,13 @@ class KnowledgeGraph:
             logger.error(f"Failed to query edges: {e}")
             return []
 
-    def clear(self):
+    def clear(self, auto_commit: bool = True):
         """Clears all edges."""
         try:
             conn = self._get_conn()
             conn.execute("DELETE FROM edges")
-            conn.commit()
+            if auto_commit:
+                conn.commit()
         except Exception as e:
             logger.error(f"Failed to clear knowledge graph: {e}")
 

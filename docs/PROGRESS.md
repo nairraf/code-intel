@@ -25,7 +25,8 @@
 - [x] **Quality Audit**: Performed comprehensive code quality review (12 refactoring opportunities identified).
 - [x] **Code Quality (Wave 1)**: Remediated prioritized technical debt in configuration, storage, and server logic, improving maintainability.
 - [x] **Code Quality (Wave 2)**: Decomposed monolithic `server.py` into `src/tools/` sub-modules, `src/indexer.py`, and `src/context.py` (AppContext DI). Removed all "God" terminology. 98 tests passing at **83% coverage**.
-- [x] **Code Quality (Wave 3)**: Eliminated SQLite connection-per-call overhead, implemented Pass 1-2 parsing cache, extracted `_recursive_chunk` scoping rules into the Strategy Pattern (`src/scoping.py`), and normalized `_extract_usages` AST captures. Improved performance and maintainability. 106 tests passing at >80% coverage.
+- [2026-03-04] **Wave 3: Core Refactor**: Extracted logic from `server.py` into specialized tools. Implemented Scoping Strategy pattern and Parse Caching for 50%+ speedup.
+- [2026-03-04] **Wave 4: Performance Refinement**: Implemented LanceDB table handle caching and SQLite transaction batching for KnowledgeGraph writes. Reduced indexing overhead on large projects.
 
 ### In Progress
 

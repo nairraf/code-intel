@@ -72,4 +72,5 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 
 - [x] **Wave 1: Quick Wins** (Sorting logic, inline imports, exception handling, config bug).
 - [x] **Wave 2: Structural Decomposition** (`server.py` → `src/tools/`, `src/indexer.py`, `src/context.py`; AppContext DI container; 83% test coverage).
-- [ ] **Wave 3: Performance & Efficiency** (SQLite connection pooling, parse caching).
+- [x] **Wave 3: Performance & Core Refactor** (Strategy Pattern, Persistence, Pass 2 Caching).
+- [x] **Wave 4: Production-Grade Scaling** (LanceDB Caching, SQLite Transaction Batching).

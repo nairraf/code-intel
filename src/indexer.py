@@ -211,8 +211,13 @@ async def refresh_index_impl(
             await process_file_pass2(filepath)
 
     logger.info("Starting Pass 2: Linking Usages...")
-    tasks_p2 = [process_file_bounded_pass2(fd) for fd in files_to_process]
-    await asyncio.gather(*tasks_p2)
+    ctx.knowledge_graph.begin_transaction()
+    try:
+        tasks_p2 = [process_file_bounded_pass2(fd) for fd in files_to_process]
+        await asyncio.gather(*tasks_p2)
+        ctx.knowledge_graph.commit_transaction()
+    except Exception as e:
+        logger.error(f"Linking transaction failed: {e}")
 
     final_count = ctx.vector_store.count_chunks(project_root_str)
     scan_type = "Full Rebuild" if force_full_scan else "Incremental Update"
