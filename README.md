@@ -141,9 +141,8 @@ The server manages its own local "vault" and uses local AI to power its semantic
 
 We are actively stabilizing the codebase and addressing technical debt to ensure robust, enterprise-grade reliability:
 
-* **Code Quality (Wave 1)**: Executed targeted refactoring to resolve configuration bugs, deduplicate sorting logic, and clean up inline imports across core modules.
-* **Security Hardening**: Remediated findings from a comprehensive security audit, including path traversal protection and SQL injection safeguards.
-* **Advanced Python Linking**: Enhanced AST-based resolution for Python middleware (e.g., FastAPI `Depends()`) to ensure accurate "Jump to Definition" across the knowledge graph.
+* **Wave 4: Production-Grade Scaling**: Drastically reduced indexing overhead through LanceDB table handle caching and batched SQLite transactions for KnowledgeGraph writes.
+* **Robust Windows Support**: Fixed a critical concurrency race condition and standardized path normalization (UNC/Long Path support) to ensure reliable indexing on Windows 11.
 
 ## 🧪 Development
 
