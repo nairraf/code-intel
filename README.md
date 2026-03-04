@@ -7,7 +7,49 @@
 
 Give your AI agents a "brain" that actually understands your codebase. This Model Context Protocol (MCP) server provides high-performance semantic search and deep code insights, making it easier for AI tools to navigate, understand, and modify complex projects.
 
-## 🚀 Why Code Intelligence?
+**This is not just a search tool; it is an analysis engine.** While standard Indexers just treat files as pure text, `code-intel` parses your codebase into a living knowledge graph. It maps abstract syntax trees (ASTs), dynamic dependencies, and architectural patterns, allowing your AI to enforce strict methodologies, understand blast radiuses, and confidently pair-program on enterprise-grade software.
+
+---
+
+## 🚀 Get Started
+
+The server requires **Ollama** to handle local embeddings.
+
+1.  **Install & Download Model**:
+    Download [Ollama](https://ollama.com) and pull the high-precision embedding model:
+    ```bash
+    ollama pull unclemusclez/jina-embeddings-v2-base-code
+    ```
+2.  **Add to MCP Configuration**:
+    Add the following to your AI client's MCP settings (e.g., Claude Desktop or Antigravity `mcp_config.json`). Replace `/path/to/code-intel` with the absolute path to this project.
+    
+    ```json
+    {
+      "mcpServers": {
+        "code-intel": {
+          "command": "uv",
+          "args": ["run", "--quiet", "--directory", "/path/to/code-intel", "python", "-m", "src.server"],
+          "env": { "PYTHONUNBUFFERED": "1" }
+        }
+      }
+    }
+    ```
+3.  **Use it!** Your AI assistant will automatically connect to Ollama and begin indexing your project upon the first query.
+
+---
+
+## 🎯 Unique Advantages for Structured Engineering
+
+While many tools offer basic semantic search, `code-intel` is purpose-built to enforce strict architectural rules and support advanced software engineering methodologies:
+
+*   **Project Pulse & Health Metrics**: Go beyond simple search. The internal engine actively identifies "Dependency Hubs" and "High-Risk Symbols" (files with high complexity but low test coverage), guiding refactoring efforts and enforcing test-gated workflows.
+*   **Deep Framework Analysis**: Standard indexers often fail at mapping dynamic patterns. This server specifically tracks dynamic dependency injection (like Python's `Depends()`) and framework-specific middleware, allowing developers to keep business logic pure and fully mockable.
+*   **Targeted Re-Indexing**: Working in a massive mono-repo? You don't need to re-index the entire universe. Use targeted `include`/`exclude` patterns to update the knowledge graph on-the-fly for only the microservice or module you are actively developing.
+*   **Contract-First Validation**: By exposing the precise call graph and interface definitions, `code-intel` helps validate that implementations adhere to established API contracts and structural patterns before code is committed.
+
+---
+
+## � Why Code Intelligence?
 
 AI models often struggle with large codebases because they can't "see" everything at once. This server acts as a **smart bridge**, solving several key challenges:
 
