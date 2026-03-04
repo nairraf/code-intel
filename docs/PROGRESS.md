@@ -3,6 +3,7 @@
 ## Current Focus: Stability & Environment Reliability
 
 ### Completed Tasks
+
 - [x] Project Structure Initialization.
 - [x] Tree-sitter language pack integration.
 - [x] Vector store (LanceDB) implementation.
@@ -22,8 +23,10 @@
 - [x] **Milestone 3: Cross-File Linking Engine** (Import Resolution + Knowledge Graph).
 - [x] **Security Hardening: Remediation of Audit Findings** (SQLi, Pickle, Path Traversal).
 - [x] **Quality Audit**: Performed comprehensive code quality review (12 refactoring opportunities identified).
+- [x] **Code Quality (Wave 1)**: Remediated prioritized technical debt in configuration, storage, and server logic, improving maintainability.
 
 ### In Progress
+
 - [x] **Phase 3.4.5: Incremental Indexing Excellence** (File Hashing + Skip Logic).
 - [x] **Phase 3.4.6: Global Symbol Excellence** (Variable/Constant resolution).
 - [x] **Phase 3.5: Domain-Specific Intelligence** (Firestore Rules, Mermaid).
@@ -32,11 +35,12 @@
 - [x] **Windows Stability**: Fixed FastMCP busy-loop CPU spike (pinned `fastmcp==2.13.3`).
 - [x] **Codebase Cleanup**: Removed diagnostic scripts and standardized environment isolation.
 
-
 ### Upcoming
+
 - [ ] Advanced linking & discovery (Phase 3.6).
 
 ### Verification Status
+
 - [x] **Full Rebuild & Tool Test:** Verified `search_code`, `get_stats`, `find_definition`, `find_references` on fresh index. All passed.
 - [x] **Hardened Testing:** Implemented real DB tests for `VectorStore` and full integration tests. Coverage gaps reduced.
 - [x] **80% Coverage Target:** Successfully reached 80% total project coverage across all core modules.

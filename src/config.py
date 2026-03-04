@@ -13,13 +13,17 @@ VAULT_DIR = VAULT_ROOT / "db"
 LOG_DIR = VAULT_ROOT / "logs"
 
 # Ensure directories exist
-for d in [VAULT_DIR, LOG_DIR]:
-    try:
-        d.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        # Fallback to local
-        d = PROJECT_ROOT / ".code_intel_store" / d.name
-        d.mkdir(parents=True, exist_ok=True)
+try:
+    VAULT_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    VAULT_DIR = PROJECT_ROOT / ".code_intel_store" / "db"
+    VAULT_DIR.mkdir(parents=True, exist_ok=True)
+
+try:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    LOG_DIR = PROJECT_ROOT / ".code_intel_store" / "logs"
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 # Cache Directory (Shared global cache)
 CACHE_DIR = VAULT_ROOT / "cache"

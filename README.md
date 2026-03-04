@@ -6,29 +6,32 @@ Give your AI agents a "brain" that actually understands your codebase. This Mode
 
 AI models often struggle with large codebases because they can't "see" everything at once. This server acts as a **smart bridge**, solving several key challenges:
 
-*   **Token Savings**: Instead of dumping your entire codebase into a Cloud AI's context (which is expensive and slow), this server finds the *exact* relevant snippets.
-*   **Smarter Context**: Locates code by meaning, not just keywords, ensuring the AI gets the context it actually needs.
-*   **Deep Relationships**: Maps how your code is connected—calls, definitions, and module interactions—so the AI can trace logic across files.
-*   **Superior Code Embeddings**: Optimized for `jina-embeddings-v2-base-code`, which provides high-precision retrieval for 80+ programming languages.
-*   **Cost & Speed Efficiency**: Local embedding caching prevents redundant processing, saving time and compute resources.
-
+* **Token Savings**: Instead of dumping your entire codebase into a Cloud AI's context (which is expensive and slow), this server finds the *exact* relevant snippets.
+* **Smarter Context**: Locates code by meaning, not just keywords, ensuring the AI gets the context it actually needs.
+* **Deep Relationships**: Maps how your code is connected—calls, definitions, and module interactions—so the AI can trace logic across files.
+* **Superior Code Embeddings**: Optimized for `jina-embeddings-v2-base-code`, which provides high-precision retrieval for 80+ programming languages.
+* **Cost & Speed Efficiency**: Local embedding caching prevents redundant processing, saving time and compute resources.
 
 ---
 
 ## ✨ Key Features
 
 ### ⚡ Intelligent Caching
+
 Our embedding cache drastically reduces latency. By storing "fingerprints" of your code locally, we avoid re-calculating embeddings for unchanged files, making searches nearly instantaneous.
 
 ### 🧭 Semantic "Meaning-Based" Search
+
 Go beyond simple keyword matching. Search for concepts like "how do we handle user authentication?" and find the relevant logic even if the exact words aren't used.
 
 ### 🏛️ Cross-File Architecture Graph
+
 A persistent knowledge graph tracks imports and function calls across your entire project. This enables precise "Jump to Definition" and "Find References" that work reliably across many files, including advanced structural tracking for Dart widget instantiations and Python dependency injection (`Depends()`).
 
 ---
 
 ### 🛡️ Security & Quality Hardened
+
 Independently audited and remediated against OWASP Top 10 vulnerabilities. Includes robust sanitization for vector filters, safe JSON-based serialization, and strict path containment. The codebase has also undergone a comprehensive quality review with an established remediation backlog.
 
 ---
@@ -51,42 +54,51 @@ These tools are specifically designed to give Cloud-based AI agents "Just-in-Tim
 
 The server requires **Ollama** to handle local embeddings.
 
-1.  **Install Ollama**: Download it from [ollama.com](https://ollama.com).
-2.  **Download the Model**: Run the following command to download the high-precision code embedding model:
+1. **Install Ollama**: Download it from [ollama.com](https://ollama.com).
+2. **Download the Model**: Run the following command to download the high-precision code embedding model:
+
     ```bash
     ollama pull unclemusclez/jina-embeddings-v2-base-code
     ```
-3.  **Setup Environment**:
 
-    *   **Using `uv` (Recommended)**:
+3. **Setup Environment**:
+
+    * **Using `uv` (Recommended)**:
+
         ```bash
         uv sync
         ```
-    *   **Standard Python**:
+
+    * **Standard Python**:
+
         ```bash
         python -m venv .venv
         source .venv/bin/activate  # On Windows: .venv\Scripts\activate
         pip install -e .
         ```
-4.  **Run the MCP Server**: The MCP server will automatically connect to Ollama and begin indexing your project. See MCP Configuration for more information.
+
+4. **Run the MCP Server**: The MCP server will automatically connect to Ollama and begin indexing your project. See MCP Configuration for more information.
 
 ## 🔎 Scope Tuning (New!)
 
 Reduce noise by filtering what gets indexed and searched. Code-Intel supports standard glob patterns for inclusions and exclusions.
 
 ### Code Navigation
-- **`search_code(query, include, exclude)`**: Semantic search with regex/glob filtering.
-  - *Example*: `search_code("auth", exclude="tests/**")`
-- **`refresh_index(include, exclude)`**: Target specific directories or exclude legacy code during re-indexing.
-  - *Example*: `refresh_index(include="src/api/**")`
+
+* **`search_code(query, include, exclude)`**: Semantic search with regex/glob filtering.
+  * *Example*: `search_code("auth", exclude="tests/**")`
+
+* **`refresh_index(include, exclude)`**: Target specific directories or exclude legacy code during re-indexing.
+  * *Example*: `refresh_index(include="src/api/**")`
 
 ### Default Ignores
-System directories like `node_modules`, `.git`, `venv`, and `__pycache__` are always excluded by default.
 
+System directories like `node_modules`, `.git`, `venv`, and `__pycache__` are always excluded by default.
 
 Add the following to your MCP settings. Replace `/path/to/code-intel` with the actual absolute path to this project on your machine.
 
 **Antigravity (`mcp_config.json`)**
+
 ```json
 {
   "mcpServers": {
@@ -100,6 +112,7 @@ Add the following to your MCP settings. Replace `/path/to/code-intel` with the a
 ```
 
 **VS Code / Claude Desktop**
+
 ```json
 {
   "servers": {
@@ -122,8 +135,15 @@ The server manages its own local "vault" and uses local AI to power its semantic
 | **Central Vault** | `~/.code_intel_store/` | Where all project indexes, knowledge graphs, and local caches are stored. |
 | **Emission Logs** | `~/.code_intel_store/logs/` | Detailed server logs for debugging and monitoring pulse. |
 
-
 ---
+
+## 🆕 Recent Updates
+
+We are actively stabilizing the codebase and addressing technical debt to ensure robust, enterprise-grade reliability:
+
+* **Code Quality (Wave 1)**: Executed targeted refactoring to resolve configuration bugs, deduplicate sorting logic, and clean up inline imports across core modules.
+* **Security Hardening**: Remediated findings from a comprehensive security audit, including path traversal protection and SQL injection safeguards.
+* **Advanced Python Linking**: Enhanced AST-based resolution for Python middleware (e.g., FastAPI `Depends()`) to ensure accurate "Jump to Definition" across the knowledge graph.
 
 ## 🧪 Development
 

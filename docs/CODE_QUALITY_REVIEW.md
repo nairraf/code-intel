@@ -67,11 +67,13 @@ linker = SymbolLinker(vector_store, knowledge_graph)
 ```
 
 **Problems:**
+
 - **Untestable:** You cannot inject mocks without monkey-patching.
 - **Side effects on import:** Database connections, HTTP clients, and SQLite dbs are all opened the moment the module is loaded.
 - **No lifecycle management:** `OllamaClient.aclose()` is never called.
 
 **Fix:** Use a simple DI container or factory function:
+
 ```python
 class AppContext:
     def __init__(self):
@@ -92,6 +94,7 @@ class AppContext:
 ### 4. `KnowledgeGraph` Opens a New SQLite Connection Per Call
 
 Every `add_edge()`, `get_edges()`, and `clear()` call does:
+
 ```python
 with sqlite3.connect(self.db_path) as conn:
 ```
@@ -120,11 +123,13 @@ chunks = parser.parse_file(filepath, project_root=project_root_str)
 ### 6. `_recursive_chunk` Is Spaghetti (~90 lines, complexity 111)
 
 [parser.py L179-269](file:///d:/Development/code-intel/src/parser.py#L179-L269) is the **most complex function in the codebase** (complexity score: 111 per `get_stats`). It contains:
+
 - Nested `if lang == "python"` / `if lang == "dart"` blocks with deeply nested parent-type checks
 - Magic conditions like `node.parent.type == "module" if node.type == "expression_statement" else ...`
 - Duplicate logic for Python and Dart scoping
 
 **Fix:** Extract language-specific scoping rules into a Strategy pattern:
+
 ```python
 class PythonScopingStrategy:
     def is_global_target(self, node) -> bool: ...
@@ -155,16 +160,19 @@ The logic inside each branch is **identical** (same `SymbolUsage` construction, 
 ### 8. Inline Import Inside Hot Path
 
 [server.py L244](file:///d:/Development/code-intel/src/server.py#L244):
+
 ```python
 import re  # inside search_code_impl
 ```
 
 And [storage.py L81](file:///d:/Development/code-intel/src/storage.py#L81):
+
 ```python
 import json  # inside upsert_chunks
 ```
 
 And [storage.py L278-280](file:///d:/Development/code-intel/src/storage.py#L278-L280):
+
 ```python
 from collections import Counter  # inside get_detailed_stats
 from datetime import datetime, timezone
@@ -212,6 +220,7 @@ The fallback assigns to the **loop variable** `d`, so `VAULT_DIR` and `LOG_DIR` 
 ### 11. Repeated Table Existence Checks in `VectorStore`
 
 Nearly every method in `VectorStore` starts with:
+
 ```python
 table_name = self._get_table_name(project_root)
 if table_name not in self.db.table_names():
@@ -221,6 +230,7 @@ if table_name not in self.db.table_names():
 This is **10 occurrences** of the same boilerplate.
 
 **Fix:** Extract a `_get_table_or_none()` helper:
+
 ```python
 def _get_table_or_none(self, project_root: str):
     table_name = self._get_table_name(project_root)
@@ -272,9 +282,10 @@ Simple copy-paste artifact.
 2. **Recent work focused on correctness, not structure.** The reference tracking improvements (Dart widget instantiation edges, Python `Depends()` context tagging) added value without touching the structural issues flagged here.
 3. **The tool is validated and working well.** An independent MCP evaluation (see `docs/feedback.md`) confirmed high-confidence results for Dart references, correct semantic search, and accurate definition lookups.
 
-### Decision: Backlogged
+### Decision: Active (Wave 1)
 
-All remaining items are **deferred** — the tool delivers strong user value in its current form and none of these findings block functionality. The items should be revisited when:
+**Wave 1 items (2, 8, 10, 11, 12) are now ACTIVE** for remediation.
+Items from Waves 2 and 3 remain **deferred**, as the tool delivers strong user value in its current form and none of these findings block functionality. The Wave 2/3 items should be revisited when:
 
 - **Wave 1 triggers:** A contributor session with ~30 min of slack time. Items 2, 8, 10, 11, 12 are mechanical fixes with near-zero regression risk.
 - **Wave 2 triggers:** A decision to add significant new tool endpoints to `server.py`, or a need to write comprehensive unit tests against the server layer (DI becomes essential).

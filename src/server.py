@@ -5,6 +5,7 @@ import os
 import builtins
 import traceback
 import hashlib
+import re
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from fastmcp import FastMCP
@@ -241,7 +242,6 @@ async def search_code_impl(query: str, root_path: str = ".", limit: int = 10, in
         # --- HYBRID RECALL ENHANCEMENT ---
         # If the query contains highly specific terms (CORS, Firebase, etc.),
         # extract keywords and perform a literal textual search to boost recall.
-        import re
         keywords = re.findall(r'\b[A-Z]{3,}\b|\b[A-Za-z]{6,}\b', query) # ACRONYMS or words >= 6 chars
         if keywords:
             keyword_limit = limit // 2
@@ -381,6 +381,13 @@ def _get_file_priority(filename: str) -> int:
         # Lower priority for documentation
         return 50
     return 10
+
+def _rank_chunk_key(chunk: dict, source_lang: Optional[str] = None):
+    """Returns a sorting key for chunks based on language match and file priority."""
+    priority = _get_file_priority(chunk.get("filename", ""))
+    if source_lang:
+        return (chunk.get("language") == source_lang, priority)
+    return priority
     
 async def _find_definition(filename: str, line: int, symbol_name: Optional[str] = None, root_path: str = ".") -> str:
     try:
@@ -440,10 +447,7 @@ async def _find_definition(filename: str, line: int, symbol_name: Optional[str] 
                 
                 if deduped_defs:
                     # Sort candidates: same language first, then highest file priority
-                    deduped_defs.sort(
-                        key=lambda x: (x[1].get("language") == source_lang, _get_file_priority(x[1]["filename"])), 
-                        reverse=True
-                    )
+                    deduped_defs.sort(key=lambda x: _rank_chunk_key(x[1], source_lang), reverse=True)
                     
                     output = []
                     # Prioritize exact symbol_name match if provided
@@ -456,11 +460,7 @@ async def _find_definition(filename: str, line: int, symbol_name: Optional[str] 
                             # before giving up. This helps when imports are tricky or decorators weren't linked.
                             global_matches = vector_store.find_chunks_by_symbol(project_root, symbol_name)
                             if global_matches:
-                                # Filter global matches by language & priority
-                                global_matches.sort(
-                                    key=lambda x: (x.get("language") == source_lang, _get_file_priority(x["filename"])),
-                                    reverse=True
-                                )
+                                global_matches.sort(key=lambda x: _rank_chunk_key(x, source_lang), reverse=True)
                                 deduped_defs = [(symbol_name, g) for g in global_matches]
                             
                     for name, dc in deduped_defs:
@@ -478,10 +478,7 @@ async def _find_definition(filename: str, line: int, symbol_name: Optional[str] 
                 usage_chunks = vector_store.find_chunks_with_usage(project_root, symbol_name)
                 if usage_chunks:
                     # Prioritize source language and source code vs docs
-                    usage_chunks.sort(
-                        key=lambda x: (x.get("language") == source_lang, _get_file_priority(x["filename"])),
-                        reverse=True
-                    )
+                    usage_chunks.sort(key=lambda x: _rank_chunk_key(x, source_lang), reverse=True)
                     output = []
                     for t in usage_chunks:
                         output.append(f"Heuristic Reference Found -> File: {t['filename']} ({t['start_line']}-{t['end_line']})\nContent:\n```\n{t['content']}\n```")
@@ -489,10 +486,7 @@ async def _find_definition(filename: str, line: int, symbol_name: Optional[str] 
                 return f"No definition or clear usage found for symbol '{symbol_name}'"
             
             # Sort global matches
-            targets.sort(
-                key=lambda x: (x.get("language") == source_lang, _get_file_priority(x["filename"])),
-                reverse=True
-            )
+            targets.sort(key=lambda x: _rank_chunk_key(x, source_lang), reverse=True)
             output = []
             for t in targets:
                 output.append(f"File: {t['filename']} ({t['start_line']}-{t['end_line']})\nContent:\n```\n{t['content']}\n```")
@@ -526,7 +520,6 @@ async def _find_references(symbol_name: str, root_path: str = ".") -> str:
         # 1. Find the chunk(s) defining the symbol
         def_chunks = vector_store.find_chunks_by_symbol(project_root, symbol_name)
         if not def_chunks:
-            # 2. Fallback: Symbol might be external (e.g., FastAPI Depends, decorators). 
             # 2. Fallback: Symbol might be external (e.g., FastAPI Depends, decorators).
             # Search usages across project chunks directly.
             usage_chunks = vector_store.find_chunks_with_usage(project_root, symbol_name)
@@ -536,7 +529,7 @@ async def _find_references(symbol_name: str, root_path: str = ".") -> str:
             # If we originated from a specific file, we should try to discover its language
             # but _find_references doesn't take a source filename.
             # We will just prioritize source code over documentation globally.
-            usage_chunks.sort(key=lambda x: _get_file_priority(x["filename"]), reverse=True)
+            usage_chunks.sort(key=lambda x: _rank_chunk_key(x), reverse=True)
 
             all_refs = []
             for c in usage_chunks:
