@@ -1,5 +1,10 @@
 # Code Intelligence MCP Server 🧠
 
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![MCP](https://img.shields.io/badge/MCP-Powered-orange.svg)](https://modelcontextprotocol.io)
+[![Coverage](https://codecov.io/gh/nairraf/code-intel/graph/badge.svg)](https://codecov.io/gh/nairraf/code-intel)
+
 Give your AI agents a "brain" that actually understands your codebase. This Model Context Protocol (MCP) server provides high-performance semantic search and deep code insights, making it easier for AI tools to navigate, understand, and modify complex projects.
 
 **This is not just a search tool; it is an analysis engine.** While standard Indexers just treat files as pure text, `code-intel` parses your codebase into a living knowledge graph. It maps abstract syntax trees (ASTs), dynamic dependencies, and architectural patterns, allowing your AI to enforce strict methodologies, understand blast radiuses, and confidently pair-program on enterprise-grade software.
@@ -48,84 +53,156 @@ While many tools offer basic semantic search, `code-intel` is purpose-built to e
 
 AI models often struggle with large codebases because they can't "see" everything at once. This server acts as a **smart bridge**, solving several key challenges:
 
-*   **Token Savings**: Instead of dumping your entire codebase into a Cloud AI's context (which is expensive and slow), this server finds the *exact* relevant snippets.
-*   **Smarter Context**: Locates code by meaning, not just keywords, ensuring the AI gets the context it actually needs.
-*   **Deep Relationships**: Maps how your code is connected—calls, definitions, and module interactions—so the AI can trace logic across files.
-*   **Superior Code Embeddings**: Optimized for `jina-embeddings-v2-base-code`, which provides high-precision retrieval for 80+ programming languages.
-*   **Cost & Speed Efficiency**: Local embedding caching prevents redundant processing, saving time and compute resources.
+* **Token Savings**: Instead of dumping your entire codebase into a Cloud AI's context (which is expensive and slow), this server finds the *exact* relevant snippets.
+* **Smarter Context**: Locates code by meaning, not just keywords, ensuring the AI gets the context it actually needs.
+* **Deep Relationships**: Maps how your code is connected—calls, definitions, and module interactions—so the AI can trace logic across files.
+* **Superior Code Embeddings**: Optimized for `jina-embeddings-v2-base-code`, which provides high-precision retrieval for 80+ programming languages.
+* **Cost & Speed Efficiency**: Local embedding caching prevents redundant processing, saving time and compute resources.
+
+---
+
+## 🏗️ Technical Architecture
+
+Code Intelligence uses a **Two-Pass Indexing** strategy to map your codebase into a hybrid search system.
+
+```mermaid
+graph TD
+    A[Project Root] --> B[File Scanner]
+    B -->|Pass 1| C[Tree-sitter Parser]
+    C --> D[Extraction: Symbols, Types, Defs]
+    D --> E[Ollama Embeddings]
+    E --> F[LanceDB Vector Store]
+    
+    B -->|Pass 2| G[Symbol Linker]
+    G --> H[Knowledge Graph]
+    H --> I[Edges: Calls/Imports]
+    
+    J[AI Client] --> K[MCP Server]
+    K --> L[Hybrid Query Engine]
+    L --> F
+    L --> H
+```
 
 ---
 
 ## ✨ Key Features
 
-### ⚡ Intelligent Caching
+### Intelligent Caching
+
 Our embedding cache drastically reduces latency. By storing "fingerprints" of your code locally, we avoid re-calculating embeddings for unchanged files, making searches nearly instantaneous.
 
-### 🧭 Semantic "Meaning-Based" Search
+### Semantic "Meaning-Based" Search
+
 Go beyond simple keyword matching. Search for concepts like "how do we handle user authentication?" and find the relevant logic even if the exact words aren't used.
 
-### 🏛️ Cross-File Architecture Graph
+### Cross-File Architecture Graph
+
 A persistent knowledge graph tracks imports and function calls across your entire project. This enables precise "Jump to Definition" and "Find References" that work reliably across many files, including advanced structural tracking for Dart widget instantiations and Python dependency injection (`Depends()`).
+
+### Security & Quality Hardened
+
+Independently audited and remediated against OWASP Top 10 vulnerabilities. Includes robust sanitization for vector filters, safe JSON-based serialization, and strict path containment.
 
 ---
 
-## �🛠️ Tools for Cloud AI
+## 🛠️ Tools & Usage
 
-These tools are specifically designed to give Cloud-based AI agents "Just-in-Time" knowledge without bloating their memory.
+### Supported Tools
 
 | Tool | Benefit to Cloud AI |
 |:---|:---|
 | `search_code` | **Token Saver**: Feeds the AI only the specific logic it needs to solve a task. |
-| `get_stats` | **Strategic Overview**: Identifies "Dependency Hubs" (critical files) and "High-Risk" areas without the AI needing to read every file. |
-| `find_definition` | **Precise Navigation**: Allows the AI to jump straight to the source of any mystery function or variable. |
-| `find_references` | **Impact Analysis**: Helps the AI understand the side-effects of a change before it happens. Includes advanced mapping for UI frameworks and backend routing. |
-| `refresh_index` | **Real-time Sync**: Keeps the AI's internal "map" of your project up to date with your latest changes. |
+| `get_stats` | **Strategic Overview**: Identifies "Dependency Hubs" and "High-Risk" areas. |
+| `find_definition` | **Precise Navigation**: Jumps straight to the source of any symbol. |
+| `find_references` | **Impact Analysis**: Helps the AI understand side-effects across files. |
+| `refresh_index` | **On-Demand Sync**: Manually triggers a scan to update the code map. |
+
+### 💡 Example AI Prompts
+
+Try asking your AI agent:
+
+* **Architecture Onboarding**: *"Give me a high-level overview of the dependency hubs in this project and identify any potential technical debt."*
+* **Code Navigation**: *"Find where the `AuthenticationService` is defined and show me all the places it is referenced."*
+* **Concept Search**: *"How does this project handle error logging across different modules?"*
+* **Impact Analysis**: *"I'm planning to refactor the `StorageProvider`. Find all external dependencies that might be affected."*
 
 ---
 
-## 🌟 New Features
+## 🌐 Supported Languages
 
-Here are some of the advanced features we've recently added that Cloud AI agents can leverage directly:
+While we support 80+ languages via Tree-sitter, we provide optimized resolution for:
 
-### 🔎 Scope Tuning
-Reduce noise by filtering what gets indexed and searched. Code-Intel supports standard glob patterns for exclusions and inclusions during search or re-indexing.
-
-- **`search_code(query, include, exclude)`**: Semantic search with regex/glob filtering.
-  - *Example*: `search_code("auth", exclude="tests/**")`
-- **`refresh_index(include, exclude)`**: Target specific directories or exclude legacy code during re-indexing.
-  - *Example*: `refresh_index(include="src/api/**")`
-
-> **Note**: System directories like `node_modules`, `.git`, `venv`, and `__pycache__` are always excluded by default.
-
-### 🔗 Advanced Symbol Resolution & Source Prioritization
-We've supercharged how cross-file calls are analyzed:
-- **Deep Language Integration**: High-confidence resolution of dynamic patterns like Python dependency injection (`Depends()`) and advanced Dart widget usage querying.
-- **Language Scoping**: Smarter source prioritization ensures the AI surfaces the defining logic over secondary usages and tests.
-- **Two-Pass Linking**: A complete refactor of the underlying linker provides bullet-proof symbol tracking across large codebases.
-
-### 💾 Persistent Embedding Cache
-A robust, local caching mechanism that persists embeddings across sessions, drastically reducing latency and compute overhead when restarting the server or performing small incremental updates.
-
-### 🗄️ Internal Storage & Model Intelligence
-
-The server manages its own local "vault" and uses local AI to power its semantic capabilities.
-
-| Component | Default Location | Description |
-|:---|:---|:---|
-| **Intelligence Model** | `jina-embeddings-v2-base-code` | High-precision code embedding model (via Ollama). |
-| **Central Vault** | `~/.code_intel_store/` | Where all project indexes, knowledge graphs, and local caches are stored. |
-| **Emission Logs** | `~/.code_intel_store/logs/` | Detailed server logs for debugging and monitoring pulse. |
+* **Python** (Advanced import resolution, FastAPI/Flask dependency injection)
+* **Dart / Flutter** (Package resolution, Widget structural mapping)
+* **TypeScript / JavaScript** (ESM/CommonJS module resolution)
+* **Go & Rust**
 
 ---
 
-## 🛡️ Security & Quality Hardened
-Independently audited and remediated against OWASP Top 10 vulnerabilities. Includes robust sanitization for vector filters, safe JSON-based serialization, and strict path containment. The codebase has also undergone a comprehensive quality review with an established remediation backlog.
+## ⚙️ Quick Setup
+
+The server requires **Ollama** to handle local embeddings.
+
+1. **Install Ollama**: Download from [ollama.com](https://ollama.com).
+2. **Download the Model**:
+
+    ```bash
+    ollama pull unclemusclez/jina-embeddings-v2-base-code
+    ```
+
+3. **Setup Environment**:
+
+    ```bash
+    uv sync
+    # Or: pip install -e .
+    ```
 
 ---
 
-## 🧪 Development
+## 📦 Configuration
 
-To run the test suite and ensure everything is working correctly:
+Add the following to your MCP settings. Replace `/path/to/code-intel` with the actual absolute path.
+
+**Antigravity/Cursor/Claude Desktop**
+
+```json
+{
+  "mcpServers": {
+    "code-intel": {
+      "command": "uv",
+      "args": ["run", "--quiet", "--directory", "/path/to/code-intel", "python", "-m", "src.server"],
+      "env": { "PYTHONUNBUFFERED": "1" }
+    }
+  }
+}
+```
+
+---
+
+## 🔧 Troubleshooting
+
+| Issue | Potential Solution |
+| :--- | :--- |
+| **"Connection Refused"** | Ensure Ollama is running (`ollama serve`). |
+| **"Model Not Found"** | Run `ollama pull` for the Jina model. |
+| **"0 Chunks Indexed"** | Ensure project root path is absolute and extensions are supported. |
+| **Slow Performance** | First-time indexing is resource-intensive; subsequent runs use the cache. |
+
+---
+
+## 🚀 Recent Updates
+
+* **Production Scaling**: LanceDB table handle caching and batched SQLite transactions.
+* **Robust Windows Support**: Fixed concurrency race conditions and standardized path normalization.
+* **Scope Tuning**: Added `include`/`exclude` glob patterns for specialized indexing.
+* **Security Hardening**: Integrated automated secret scanning (Gitleaks) into the CI pipeline.
+
+---
+
+## 🧪 License & Contributing
+
+* **License**: Licensed under the [MIT License](LICENSE).
+* **Contributing**: Pull requests are welcome! For major changes, please open an issue first.
 
 ```bash
 uv run pytest tests/

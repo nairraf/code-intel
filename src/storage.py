@@ -3,6 +3,10 @@ import pyarrow as pa
 import re
 import hashlib
 import logging
+import json
+import threading
+from collections import Counter
+from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 from .config import LANCEDB_URI, TABLE_NAME, EMBEDDING_DIMENSIONS
@@ -14,17 +18,12 @@ logger = logging.getLogger(__name__)
 def _sanitize_filter_value(value: str) -> str:
     """
     Escapes a string value for safe inclusion in LanceDB SQL-like filters.
-    Doubles internal quotes and validates against injection patterns.
+    Doubles internal quotes.
     """
     if not isinstance(value, str):
         value = str(value)
     # Escape internal double quotes
     escaped = value.replace('"', '""')
-    # Reject values containing SQL keywords that shouldn't appear in identifiers
-    # This is defense-in-depth; the escaping above should be sufficient
-    dangerous_patterns = re.compile(r'\b(OR|AND|DROP|DELETE|INSERT|UPDATE|UNION|;)\b', re.IGNORECASE)
-    if dangerous_patterns.search(escaped):
-        raise ValueError(f"Potentially dangerous filter value rejected: {value!r}")
     return escaped
 
 class VectorStore:
@@ -33,12 +32,71 @@ class VectorStore:
     def __init__(self, uri: str = LANCEDB_URI):
         self.db = lancedb.connect(uri)
         self.embedding_dims = EMBEDDING_DIMENSIONS
+        self._tables = {}
+        self._lock = threading.Lock()
 
     def _get_table_name(self, project_root: str) -> str:
         """Generates a stable, unique table name for a given project root."""
         normalized_root = normalize_path(project_root)
         path_hash = hashlib.sha256(normalized_root.encode('utf-8')).hexdigest()[:32]
         return f"chunks_{path_hash}"
+
+    def _get_table_or_none(self, project_root: str):
+        """Helper to safely fetch a table or None if it doesn't exist."""
+        table_name = self._get_table_name(project_root)
+        
+        with self._lock:
+            # Check cache first
+            if table_name in self._tables:
+                return self._tables[table_name]
+    
+            # Robustly check for table existence
+            try:
+                all_tables = self.db.list_tables()
+                if table_name not in all_tables:
+                    # Final fallback check
+                    if table_name not in self.db.table_names():
+                        return None
+            except Exception:
+                try:
+                    if table_name not in self.db.table_names():
+                        return None
+                except:
+                    return None
+                    
+            try:
+                table = self.db.open_table(table_name)
+                self._tables[table_name] = table
+                return table
+            except Exception:
+                return None
+
+    def _ensure_table(self, table_name: str):
+        """Creates the table if it doesn't exist."""
+        with self._lock:
+            if table_name in self._tables:
+                return self._tables[table_name]
+                
+            try:
+                all_tables = self.db.list_tables()
+                if table_name not in all_tables:
+                    self.db.create_table(table_name, schema=self._get_schema())
+            except Exception as e:
+                # If it already exists, just ignore and open it
+                if "already exists" not in str(e).lower():
+                    logger.error(f"Error checking/creating table {table_name}: {e}")
+            
+            try:
+                table = self.db.open_table(table_name)
+                self._tables[table_name] = table
+                return table
+            except Exception as e:
+                logger.error(f"Failed to open table {table_name}: {e}")
+                raise
+
+    def clear_caches(self):
+        """Resets the internal table handle cache."""
+        self._tables = {}
 
     def _get_schema(self):
         """Returns the standard schema for code chunk tables."""
@@ -64,11 +122,6 @@ class VectorStore:
             pa.field("vector", pa.list_(pa.float32(), self.embedding_dims)),
         ])
 
-    def _ensure_table(self, table_name: str):
-        """Creates the table if it doesn't exist."""
-        if table_name not in self.db.table_names():
-            self.db.create_table(table_name, schema=self._get_schema())
-        return self.db.open_table(table_name)
 
     def upsert_chunks(self, project_root: str, chunks: List[CodeChunk], vectors: List[List[float]]):
         """Inserts or updates chunks into a project-specific table."""
@@ -78,7 +131,6 @@ class VectorStore:
         table_name = self._get_table_name(project_root)
         table = self._ensure_table(table_name)
         
-        import json
         # Prepare data for insertion
         data = []
         for chunk, vector in zip(chunks, vectors):
@@ -114,22 +166,19 @@ class VectorStore:
 
     def search(self, project_root: str, query_vector: List[float], limit: int = 5) -> List[dict]:
         """Performs a semantic vector search within a specific project's table."""
-        table_name = self._get_table_name(project_root)
-        
-        if table_name not in self.db.table_names():
+        table = self._get_table_or_none(project_root)
+        if table is None:
             return []
             
-        table = self.db.open_table(table_name)
         results = table.search(query_vector).limit(limit).to_list()
         return results
 
     def find_chunks_by_symbol(self, project_root: str, symbol_name: str) -> List[dict]:
         """Finds chunks with a specific symbol name (case-sensitive exact match)."""
-        table_name = self._get_table_name(project_root)
-        if table_name not in self.db.table_names():
+        table = self._get_table_or_none(project_root)
+        if table is None:
             return []
         
-        table = self.db.open_table(table_name)
         # LanceDB uses SQL-like filtering - sanitize input
         safe_name = _sanitize_filter_value(symbol_name)
         results = table.search().where(f'symbol_name = "{safe_name}"').to_list()
@@ -137,11 +186,10 @@ class VectorStore:
 
     def find_chunks_with_usage(self, project_root: str, symbol_name: str) -> List[dict]:
         """Finds chunks whose content references the target symbol name (used for external symbols)."""
-        table_name = self._get_table_name(project_root)
-        if table_name not in self.db.table_names():
+        table = self._get_table_or_none(project_root)
+        if table is None:
             return []
         
-        table = self.db.open_table(table_name)
         safe_name = _sanitize_filter_value(symbol_name)
         # LanceDB supports basic wildcard string matching with LIKE
         try:
@@ -153,11 +201,10 @@ class VectorStore:
 
     def find_chunks_containing_text(self, project_root: str, query_text: str, limit: int = 10) -> List[dict]:
         """Performs a literal textual search across chunk content (Keyword Fallback)."""
-        table_name = self._get_table_name(project_root)
-        if table_name not in self.db.table_names():
+        table = self._get_table_or_none(project_root)
+        if table is None:
             return []
         
-        table = self.db.open_table(table_name)
         safe_query = _sanitize_filter_value(query_text)
         try:
             # case-insensitive search if supported, otherwise LIKE match
@@ -169,13 +216,11 @@ class VectorStore:
 
     def find_chunks_by_symbol_in_file(self, project_root: str, symbol_name: str, filepath: str) -> List[dict]:
         """Finds chunks with a specific symbol provided the filepath."""
-        table_name = self._get_table_name(project_root)
         try:
-            # Use table_names() for maximum compatibility despite the deprecation warning
-            if table_name not in self.db.table_names():
+            table = self._get_table_or_none(project_root)
+            if table is None:
                 return []
             
-            table = self.db.open_table(table_name)
             safe_name = _sanitize_filter_value(symbol_name)
             safe_filepath = _sanitize_filter_value(normalize_path(filepath))
             
@@ -187,11 +232,10 @@ class VectorStore:
 
     def get_chunk_by_id(self, project_root: str, chunk_id: str) -> Optional[dict]:
         """Retrieves a single chunk by its ID."""
-        table_name = self._get_table_name(project_root)
-        if table_name not in self.db.table_names():
+        table = self._get_table_or_none(project_root)
+        if table is None:
             return None
         
-        table = self.db.open_table(table_name)
         safe_id = _sanitize_filter_value(chunk_id)
         results = table.search().where(f'id = "{safe_id}"').to_list()
         return results[0] if results else None
@@ -199,25 +243,38 @@ class VectorStore:
     def clear_project(self, project_root: str):
         """Wipes the database table for a specific project."""
         table_name = self._get_table_name(project_root)
-        if table_name in self.db.table_names():
-            self.db.drop_table(table_name)
+        try:
+            # Pop Handle first to prevent stale writes/caching.
+            self._tables.pop(table_name, None)
+            
+            # Use delete("1=1") first to be safe, then try to drop.
+            # In some environments drop_table might be soft or delayed.
+            try:
+                table = self.db.open_table(table_name)
+                table.delete("1=1")
+            except:
+                pass
+                
+            all_tables = self.db.list_tables()
+            if table_name in all_tables:
+                self.db.drop_table(table_name)
+        except Exception as e:
+            logger.warning(f"Failed to clear project {project_root}: {e}")
 
     def count_chunks(self, project_root: str) -> int:
         """Returns the total number of chunks for a project."""
-        table_name = self._get_table_name(project_root)
-        if table_name not in self.db.table_names():
+        table = self._get_table_or_none(project_root)
+        if table is None:
             return 0
         
-        table = self.db.open_table(table_name)
         return table.count_rows()
 
     def get_project_hashes(self, project_root: str) -> dict:
         """Returns a mapping of {filename: content_hash}."""
-        table_name = self._get_table_name(project_root)
-        if table_name not in self.db.table_names():
+        table = self._get_table_or_none(project_root)
+        if table is None:
             return {}
         
-        table = self.db.open_table(table_name)
         # We only need filename and content_hash
         try:
             # Check if column exists first (for legacy tables)
@@ -242,21 +299,10 @@ class VectorStore:
 
     def get_detailed_stats(self, project_root: str) -> dict:
         """Returns detailed architectural statistics for a project."""
-        table_name = self._get_table_name(project_root)
-        
-        # Robustly check for table existence (handling different LanceDB return types)
-        try:
-            all_tables = self.db.list_tables()
-            if not isinstance(all_tables, list):
-                # Handle object with .tables attribute
-                all_tables = getattr(all_tables, "tables", [])
-            
-            if table_name not in all_tables:
-                return {}
-        except Exception:
+        table = self._get_table_or_none(project_root)
+        if table is None:
             return {}
 
-        table = self.db.open_table(table_name)
         # Select ONLY the columns we need to process to avoid huge memory/time costs
         columns = ["filename", "language", "complexity", "symbol_name", "dependencies", "related_tests", "last_modified", "author"]
         try:
@@ -275,10 +321,6 @@ class VectorStore:
         complexities = data.column("complexity").to_pylist()
         symbol_names = data.column("symbol_name").to_pylist()
 
-        from collections import Counter
-        from datetime import datetime, timezone
-        import json
-
         lang_counts = Counter(languages)
         unique_files = len(set(filenames))
         
@@ -296,7 +338,7 @@ class VectorStore:
         dep_hubs = Counter(dependency_list).most_common(5)
         
         test_gaps = []
-        stale_count = 0
+        stale_count: int = 0
         now = datetime.now(timezone.utc)
         
         for i in range(len(data)):
@@ -312,7 +354,7 @@ class VectorStore:
                     "complexity": int(complexities[i]),
                     "file": filenames[i]
                 })
-
+ 
             # Stale File check: modified > 30 days ago
             last_mod = data.column("last_modified")[i].as_py()
             if last_mod:

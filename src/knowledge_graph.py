@@ -19,39 +19,65 @@ class KnowledgeGraph:
         if db_path is None:
             db_path = str(CACHE_DIR / "knowledge_graph.sqlite")
         self.db_path = db_path
+        self._conn = None
         self._init_db()
+
+    def _get_conn(self) -> sqlite3.Connection:
+        if self._conn is None:
+            self._conn = sqlite3.connect(self.db_path)
+            self._conn.execute("PRAGMA journal_mode=WAL")
+        return self._conn
 
     def _init_db(self):
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS edges (
-                        source_chunk_id TEXT,
-                        target_chunk_id TEXT,
-                        type TEXT,
-                        metadata TEXT,
-                        PRIMARY KEY (source_chunk_id, target_chunk_id, type)
-                    )
-                """)
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_source ON edges(source_chunk_id)")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_target ON edges(target_chunk_id)")
+            conn = self._get_conn()
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS edges (
+                    source_chunk_id TEXT,
+                    target_chunk_id TEXT,
+                    type TEXT,
+                    metadata TEXT,
+                    PRIMARY KEY (source_chunk_id, target_chunk_id, type)
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_source ON edges(source_chunk_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_target ON edges(target_chunk_id)")
+            conn.commit()
         except Exception as e:
             logger.error(f"Failed to initialize knowledge graph at {self.db_path}: {e}")
 
-    def add_edge(self, source_id: str, target_id: str, type: str, metadata: Dict = None):
+    def add_edge(self, source_id: str, target_id: str, type: str, metadata: Dict = None, auto_commit: bool = True):
         """Adds a relationship edge."""
         try:
             meta_json = json.dumps(metadata) if metadata else "{}"
-            with sqlite3.connect(self.db_path) as conn:
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO edges (source_chunk_id, target_chunk_id, type, metadata)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (source_id, target_id, type, meta_json)
-                )
+            conn = self._get_conn()
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO edges (source_chunk_id, target_chunk_id, type, metadata)
+                VALUES (?, ?, ?, ?)
+                """,
+                (source_id, target_id, type, meta_json)
+            )
+            if auto_commit:
+                conn.commit()
         except Exception as e:
             logger.error(f"Failed to add edge {source_id} -> {target_id}: {e}")
+
+    def begin_transaction(self):
+        """Starts a manual transaction."""
+        try:
+            conn = self._get_conn()
+            conn.execute("BEGIN TRANSACTION")
+        except Exception as e:
+            logger.error(f"Failed to begin transaction: {e}")
+
+    def commit_transaction(self):
+        """Commits a manual transaction."""
+        try:
+            conn = self._get_conn()
+            conn.commit()
+        except Exception as e:
+            logger.error(f"Failed to commit transaction: {e}")
 
     def get_edges(self, source_id: str = None, target_id: str = None, type: str = None) -> List[Tuple[str, str, str, Dict]]:
         """
@@ -72,22 +98,30 @@ class KnowledgeGraph:
             params.append(type)
             
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.execute(query, params)
-                results = []
-                for row in cursor.fetchall():
-                    s_id, t_id, t_type, meta_json = row
-                    meta = json.loads(meta_json) if meta_json else {}
-                    results.append((s_id, t_id, t_type, meta))
-                return results
+            conn = self._get_conn()
+            cursor = conn.execute(query, params)
+            results = []
+            for row in cursor.fetchall():
+                s_id, t_id, t_type, meta_json = row
+                meta = json.loads(meta_json) if meta_json else {}
+                results.append((s_id, t_id, t_type, meta))
+            return results
         except Exception as e:
             logger.error(f"Failed to query edges: {e}")
             return []
 
-    def clear(self):
+    def clear(self, auto_commit: bool = True):
         """Clears all edges."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.execute("DELETE FROM edges")
+            conn = self._get_conn()
+            conn.execute("DELETE FROM edges")
+            if auto_commit:
+                conn.commit()
         except Exception as e:
             logger.error(f"Failed to clear knowledge graph: {e}")
+
+    def close(self):
+        """Closes the persistent database connection."""
+        if self._conn:
+            self._conn.close()
+            self._conn = None
