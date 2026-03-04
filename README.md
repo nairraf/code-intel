@@ -153,6 +153,7 @@ Add the following to your MCP settings. Replace `/path/to/code-intel` with the a
 * **Production Scaling**: LanceDB table handle caching and batched SQLite transactions.
 * **Robust Windows Support**: Fixed concurrency race conditions and standardized path normalization.
 * **Scope Tuning**: Added `include`/`exclude` glob patterns for specialized indexing.
+* **Security Hardening**: Integrated automated secret scanning (Gitleaks) into the CI pipeline.
 
 ---
 
