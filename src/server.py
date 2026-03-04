@@ -1,298 +1,118 @@
 import sys
 import logging
 import asyncio
-import os
 import builtins
 import traceback
-import hashlib
-import re
-from pathlib import Path
-from typing import List, Dict, Optional, Any
+from typing import Optional
+
 from fastmcp import FastMCP
 
 # --- STDOUT FORTRESS ---
+# Must intercept print before any other import that might write to stdout.
 _original_print = builtins.print
+
 
 def safe_print(*args, **kwargs):
     if 'file' not in kwargs or kwargs['file'] is None or kwargs['file'] == sys.stdout:
         kwargs['file'] = sys.stderr
     _original_print(*args, **kwargs)
 
-from fnmatch import fnmatch
-from .config import IGNORE_DIRS, SUPPORTED_EXTENSIONS, LOG_DIR
-from .parser import CodeParser
-from .embeddings import OllamaClient
-from .storage import VectorStore
-from .git_utils import batch_get_git_info, get_active_branch
-from .knowledge_graph import KnowledgeGraph
-from .linker import SymbolLinker
-from .utils import normalize_path
 
-# Configure logging to file
+from .config import LOG_DIR
+from .context import get_context
+from .indexer import refresh_index_impl
+from .tools.definition import find_definition_impl
+from .tools.references import find_references_impl
+from .tools.search import search_code_impl
+from .tools.stats import get_stats_impl
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler(LOG_DIR / "server.log", encoding='utf-8'),
-        logging.StreamHandler(sys.stderr)
-    ]
+        logging.StreamHandler(sys.stderr),
+    ],
 )
 logger = logging.getLogger("server")
 
-# Initialize components
+# ---------------------------------------------------------------------------
+# MCP instance + shared services
+# ---------------------------------------------------------------------------
 mcp = FastMCP("Lightweight Code Intel")
-parser = CodeParser()
-ollama_client = OllamaClient()
-vector_store = VectorStore()
-knowledge_graph = KnowledgeGraph()
-linker = SymbolLinker(vector_store, knowledge_graph)
 
-# Semaphores
+# Concurrency guards
 INFERENCE_SEMAPHORE = asyncio.Semaphore(5)
 FILE_PROCESSING_SEMAPHORE = asyncio.Semaphore(10)
 
-def _hash_file(filepath: str) -> str:
-    """Computes SHA-256 hash of a file."""
-    sha256 = hashlib.sha256()
-    try:
-        with open(filepath, "rb") as f:
-            while chunk := f.read(8192):
-                sha256.update(chunk)
-        return sha256.hexdigest()
-    except Exception as e:
-        logger.error(f"Failed to hash file {filepath}: {e}")
-        return ""
 
-def _should_process_file(filepath: str, project_root: str, include: Optional[str], exclude: Optional[str]) -> bool:
+def _get_ctx():
+    """Return the shared AppContext, lazily initialised on first call.
+
+    Using a helper rather than a module-level assignment prevents DB connections
+    and HTTP clients from being created at import time (which would break tests
+    that patch src.context._context before the first tool invocation).
     """
-    Determines if a file should be processed based on include/exclude patterns.
-    Path matching is done relative to project_root.
-    """
-    rel_path = os.path.relpath(filepath, project_root).replace(os.path.sep, "/")
-    
-    # 1. System Ignores (Hard Rules) - checked in os.walk but good to double check
-    for ignored in IGNORE_DIRS:
-        if ignored in rel_path.split("/"):
-            return False
-            
-    # 2. Exclude Patterns (Highest Priority)
-    if exclude and fnmatch(rel_path, exclude):
-        return False
-        
-    # 3. Include Patterns (Selective)
-    if include:
-        return fnmatch(rel_path, include)
-        
-    # Default: Process if no include pattern specified
-    return True
+    return get_context()
 
-async def refresh_index_impl(root_path: str = ".", force_full_scan: bool = False, include: str = None, exclude: str = None) -> str:
-    project_root_str = normalize_path(root_path)
-    root = Path(project_root_str)
-    if not root.exists():
-        return f"Error: Path {root} does not exist."
 
-    if force_full_scan:
-        vector_store.clear_project(project_root_str)
-        knowledge_graph.clear()
-
-    initial_count = vector_store.count_chunks(project_root_str)
-    existing_hashes = {} if force_full_scan else vector_store.get_project_hashes(project_root_str)
-    
-    stats = {"files_scanned": 0, "chunks_indexed": 0, "errors": 0, "initial_count": initial_count, "skipped": 0}
-    
-    files_to_process = []
-    files_to_skip = []
-    
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS and not d.startswith(".")]
-        for f in filenames:
-            if f.startswith("."): continue
-            file_path = Path(dirpath) / f
-            if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
-                file_str = normalize_path(str(file_path))
-                
-                # Check Scope Tuning (Include/Exclude)
-                if not _should_process_file(file_str, project_root_str, include, exclude):
-                    continue
-
-                current_hash = _hash_file(file_str)
-                stored_hash = existing_hashes.get(file_str)
-                
-                if not force_full_scan and stored_hash == current_hash:
-                    files_to_skip.append(file_str)
-                else:
-                    files_to_process.append((file_str, current_hash))
-
-    if not files_to_process and not files_to_skip:
-        return "No supported code files found matching your criteria."
-
-    stats["files_scanned"] = len(files_to_process) + len(files_to_skip)
-    stats["skipped"] = len(files_to_skip)
-
-    if not files_to_process:
-        return (
-            f"Indexing Complete (All {stats['skipped']} files unchanged).\n"
-            f"Total Chunks in Index: {initial_count}"
-        )
-
-    # Process only files that changed
-    just_filepaths = [f[0] for f in files_to_process]
-    git_info = await batch_get_git_info(just_filepaths, project_root_str)
-
-    # --- PASS 1: Index Definitions & Embeddings ---
-    async def process_file_pass1(filepath: str, file_hash: str):
-        try:
-            chunks = parser.parse_file(filepath, project_root=project_root_str)
-            if not chunks: return 0
-            file_git = git_info.get(filepath, {"author": None, "last_modified": None})
-            for chunk in chunks:
-                chunk.author = file_git.get("author")
-                chunk.last_modified = file_git.get("last_modified")
-                chunk.content_hash = file_hash
-            
-            # Embeddings
-            texts = [f"{c.language} {c.type} {c.symbol_name}: {c.content}" for c in chunks]
-            embeddings = await ollama_client.get_embeddings_batch(texts, semaphore=INFERENCE_SEMAPHORE)
-            
-            if embeddings:
-                vector_store.upsert_chunks(project_root_str, chunks, embeddings)
-            
-            return len(chunks)
-        except Exception as e:
-            logger.error(f"Pass 1 (Indexing) failed for {filepath}: {e}")
-            return 0
-
-    async def process_file_bounded_pass1(file_data):
-        filepath, file_hash = file_data
-        async with FILE_PROCESSING_SEMAPHORE:
-            return await process_file_pass1(filepath, file_hash)
-
-    # Execute Pass 1
-    logger.info("Starting Pass 1: Indexing Definitions...")
-    tasks_p1 = [process_file_bounded_pass1(fd) for fd in files_to_process]
-    results_p1 = await asyncio.gather(*tasks_p1)
-    stats["chunks_indexed"] = sum(results_p1)
-
-    # --- PASS 2: Link Usages ---
-    # We must wait for Pass 1 to complete so all definitions are in the DB.
-    
-    async def process_file_pass2(filepath: str):
-        try:
-            # We re-parse to get the usages (since we don't store them in DB yet)
-            # This is fast as we don't need embeddings/git info/hashing again.
-            chunks = parser.parse_file(filepath, project_root=project_root_str)
-            if not chunks: return
-            
-            for chunk in chunks:
-                linker.link_chunk_usages(project_root_str, chunk)
-        except Exception as e:
-            logger.error(f"Pass 2 (Linking) failed for {filepath}: {e}")
-
-    async def process_file_bounded_pass2(file_data):
-        filepath, _ = file_data
-        async with FILE_PROCESSING_SEMAPHORE:
-            await process_file_pass2(filepath)
-
-    logger.info("Starting Pass 2: Linking Usages...")
-    tasks_p2 = [process_file_bounded_pass2(fd) for fd in files_to_process]
-    await asyncio.gather(*tasks_p2)
-    
-    final_count = vector_store.count_chunks(project_root_str)
-    scan_type = "Full Rebuild" if force_full_scan else "Incremental Update"
-    return (
-        f"Indexing Complete for project: {project_root_str}\n"
-        f"Scan Type: {scan_type}\n"
-        f"Files Scanned: {stats['files_scanned']} ({stats['skipped']} skipped)\n"
-        f"Total Chunks in Index: {final_count}"
-    )
+# ---------------------------------------------------------------------------
+# MCP tool registrations (thin wrappers — business logic lives in sub-modules)
+# ---------------------------------------------------------------------------
 
 @mcp.tool()
-async def refresh_index(root_path: str = ".", force_full_scan: bool = False, include: str = None, exclude: str = None) -> str:
+async def refresh_index(
+    root_path: str = ".",
+    force_full_scan: bool = False,
+    include: str = None,
+    exclude: str = None,
+) -> str:
     """
     Scans, parses, and indexes the codebase for semantic search and symbol linking.
-    
+
     BEST FOR:
     - First-time initialization of a project workspace.
     - Synchronizing the index after a major refactor or git pull.
     - Rebuilding the 'Knowledge Graph' (edges) to fix broken jump-to-definition links.
     - Targeting specific directories for re-indexing (via 'include').
-    
+
     Args:
         root_path: The absolute path to the project root. Defaults to current directory.
-        force_full_scan: If True, wipes the existing index and performs a total rebuild. 
+        force_full_scan: If True, wipes the existing index and performs a total rebuild.
                          Use this if the index feels stale or corrupted.
         include: Optional glob pattern to ONLY index matching files (e.g., 'src/api/**').
         exclude: Optional glob pattern to SKIP matching files (e.g., 'tests/**').
     """
-    return await refresh_index_impl(root_path, force_full_scan, include, exclude)
+    return await refresh_index_impl(
+        root_path, force_full_scan, include, exclude,
+        ctx=_get_ctx(),
+        inference_semaphore=INFERENCE_SEMAPHORE,
+        file_semaphore=FILE_PROCESSING_SEMAPHORE,
+    )
 
-async def search_code_impl(query: str, root_path: str = ".", limit: int = 10, include: str = None, exclude: str = None) -> str:
-    try:
-        root = Path(root_path).resolve()
-        project_root_str = str(root)
-        
-        # Determine internal fetch limit. If filtering is active, we need to fetch more
-        # candidates from the vector store to ensure we still return 'limit' results after filtering.
-        fetch_limit = limit * 5 if (include or exclude) else limit
-        
-        query_vec = await ollama_client.get_embedding(query)
-        results = vector_store.search(project_root_str, query_vec, limit=fetch_limit)
-        
-        # --- HYBRID RECALL ENHANCEMENT ---
-        # If the query contains highly specific terms (CORS, Firebase, etc.),
-        # extract keywords and perform a literal textual search to boost recall.
-        keywords = re.findall(r'\b[A-Z]{3,}\b|\b[A-Za-z]{6,}\b', query) # ACRONYMS or words >= 6 chars
-        if keywords:
-            keyword_limit = limit // 2
-            seen_ids = set(r.get('id') for r in results if r.get('id'))
-            for kw in keywords[:3]: # Limit to top 3 long keywords to avoid spam
-                text_results = vector_store.find_chunks_containing_text(project_root_str, kw, limit=keyword_limit)
-                for tr in text_results:
-                    tr_id = tr.get('id')
-                    if tr_id and tr_id not in seen_ids:
-                        # Append keyword results at the end (lower score than semantic but better than nothing)
-                        results.append(tr)
-                        seen_ids.add(tr_id)
-        
-        if not results: return f"No matching code found in project: {project_root_str}"
-        
-        filtered_results = []
-        for r in results:
-            # Check Scope Tuning
-            if _should_process_file(r['filename'], project_root_str, include, exclude):
-                filtered_results.append(r)
-                if len(filtered_results) >= limit:
-                    break
-        
-        if not filtered_results:
-             return f"No matches found after applying filters (fetched {len(results)} candidates)."
-
-        output = [f"Results for project: {project_root_str}\n"]
-        for r in filtered_results:
-            meta = []
-            if r.get('author'): meta.append(f"Author: {r['author']}")
-            if r.get('last_modified'): meta.append(f"Date: {r['last_modified']}")
-            if r.get('dependencies') and r['dependencies'] != "[]": meta.append(f"Deps: {r['dependencies']}")
-            
-            meta_str = "\n".join(meta) + "\n" if meta else ""
-            output.append(f"File: {r['filename']} ({r['start_line']}-{r['end_line']})\nSymbol: {r.get('symbol_name', 'N/A')}\nComplexity: {r.get('complexity', 0)}\n{meta_str}Content:\n```\n{r['content']}\n```\n")
-        return "\n---\n".join(output)
-    except Exception as e:
-        return f"Search failed: {e}"
 
 @mcp.tool()
-async def search_code(query: str, root_path: str = ".", limit: int = 10, include: str = None, exclude: str = None) -> str:
+async def search_code(
+    query: str,
+    root_path: str = ".",
+    limit: int = 10,
+    include: str = None,
+    exclude: str = None,
+) -> str:
     """
     Performs a semantic (vector-based) search over the indexed codebase.
-    
+
     BEST FOR:
     - Finding code related to a concept (e.g., 'how is authentication handled?').
     - Locating similar implementations across the codebase.
     - Navigating unfamiliar projects where specific symbol names aren't known.
-    
-    The results will include chunk-level author, modification date, and complexity metadata. Note: for broader architectural project pulse tracking, utilize the `get_stats` tool.
-    
+
+    The results will include chunk-level author, modification date, and complexity metadata.
+    Note: for broader architectural project pulse tracking, utilize the `get_stats` tool.
+
     Args:
         query: Natural language description of what you are looking for.
         root_path: Project root directory to search within.
@@ -300,270 +120,75 @@ async def search_code(query: str, root_path: str = ".", limit: int = 10, include
         include: Optional glob pattern to ONLY return matches from specific files (e.g. 'src/**').
         exclude: Optional glob pattern to HIDE matches from specific files (e.g. 'tests/**').
     """
-    return await search_code_impl(query, root_path, limit, include, exclude)
+    return await search_code_impl(query, _get_ctx(), root_path, limit, include, exclude)
+
 
 @mcp.tool()
 async def get_stats(root_path: str = ".") -> str:
     """
     Provides a high-level architectural overview and 'Project Pulse' health report.
-    
+
     BEST FOR:
     - Identifying 'High-Risk Symbols' (very high complexity with low test coverage).
     - Finding 'Dependency Hubs' (central files that might be refactor targets).
     - Checking the 'Project Pulse' (active branch, stale files).
     - Quantifying language distribution and technical debt.
-    
+
     Args:
         root_path: Project root directory to analyze.
     """
-    return await get_stats_impl(root_path)
+    return await get_stats_impl(root_path, _get_ctx())
 
-async def get_stats_impl(root_path: str = ".") -> str:
-    """Provides architectural insights."""
-    try:
-        root = Path(root_path).resolve()
-        project_root_str = str(root)
-        if vector_store is None: return "Error: Vector store not initialized."
-        
-        # LanceDB stats retrieval (synchronous - robust against threading issues)
-        stats = vector_store.get_detailed_stats(project_root_str)
-        
-        if not stats: return f"No index found for project: {project_root_str}"
-        
-        lang_breakdown = "\n".join([f"  - {lang}: {count} chunks" for lang, count in stats["languages"].items()])
-        summary = (
-            f"Stats for: {project_root_str}\n"
-            f"Total Chunks:     {stats['chunk_count']}\n"
-            f"Unique Files:     {stats['file_count']}\n"
-            f"Avg Complexity:   {stats['avg_complexity']:.2f}\n"
-            f"Max Complexity:   {stats['max_complexity']}\n"
-            f"Languages:\n{lang_breakdown}"
-        )
-
-        hubs = "\n".join([f"  - {h['file']} ({h['count']} imports)" for h in stats.get("dependency_hubs", [])[:5]])
-        test_gaps = "\n".join([f"  - {g['symbol']} ({g['complexity']}) in {Path(g['file']).name}" for g in stats.get("test_gaps", [])[:5]])
-        
-        # Active branch retrieval
-        branch = await get_active_branch(project_root_str)
-        
-        pulse = f"\n\nProject Pulse:\n  - Active Branch: {branch}\n  - Stale Files:   {stats.get('stale_files_count', 0)}"
-        return f"{summary}\n\nDependency Hubs:\n{hubs}\n\nTest Gaps:\n{test_gaps}{pulse}"
-    except Exception as e:
-        logger.error(f"get_stats failed: {e}\n{traceback.format_exc()}")
-        return f"Failed to get stats: {e}"
 
 @mcp.tool()
-async def find_definition(filename: str, line: int, symbol_name: Optional[str] = None, root_path: str = ".") -> str:
+async def find_definition(
+    filename: str,
+    line: int,
+    symbol_name: Optional[str] = None,
+    root_path: str = ".",
+) -> str:
     """
     Locates the source code definition for a specific symbol.
-    
+
     BEST FOR:
     - 'Jump to Definition' logic when you encounter an unfamiliar function or class call.
     - Understanding the exact implementation details of a specific component.
     - Resolving imports across multiple files.
-    
-    Note: For dynamic dependency injection or highly nested python decorators, fallback literal searches via `grep_search` may be required if Knowledge Graph mapping fails.
-    
+
+    Note: For dynamic dependency injection or highly nested python decorators, fallback
+    literal searches via `grep_search` may be required if Knowledge Graph mapping fails.
+
     Args:
         filename: The file where the symbol is being used.
-        line: The line number of the usage (must be exactly on the line where the symbol is referenced/called).
+        line: The line number of the usage (must be exactly on the line where the symbol
+              is referenced/called).
         symbol_name: The exact name of the function, class, or variable to find.
         root_path: Project root for context.
     """
-    return await _find_definition(filename, line, symbol_name, root_path)
+    return await find_definition_impl(filename, line, _get_ctx(), symbol_name, root_path)
 
-def _get_file_priority(filename: str) -> int:
-    """Assigns priority score to files: Source > Docs > Artifacts."""
-    ext = Path(filename).suffix.lower()
-    if ext in ('.py', '.dart', '.ts', '.js', '.go', '.rs', '.java', '.cpp', '.c'):
-        return 100
-    if ext == '.md':
-        # Lower priority for documentation
-        return 50
-    return 10
-
-def _rank_chunk_key(chunk: dict, source_lang: Optional[str] = None):
-    """Returns a sorting key for chunks based on language match and file priority."""
-    priority = _get_file_priority(chunk.get("filename", ""))
-    if source_lang:
-        return (chunk.get("language") == source_lang, priority)
-    return priority
-    
-async def _find_definition(filename: str, line: int, symbol_name: Optional[str] = None, root_path: str = ".") -> str:
-    try:
-        project_root = normalize_path(root_path)
-        filepath = normalize_path(filename)
-        source_lang = parser._get_language(filepath)
-        
-        # 1. First, try AST-based origin resolution via the Knowledge Graph
-        try:
-            # Parse the file on the fly to get deterministic chunks and usages
-            chunks = parser.parse_file(filepath, project_root=project_root)
-            
-            target_chunk = None
-            target_usages = []
-            
-            for chunk in chunks:
-                if chunk.start_line <= line <= chunk.end_line:
-                    # Are we already at the definition?
-                    if symbol_name and chunk.symbol_name == symbol_name:
-                        return f"File: {chunk.filename} ({chunk.start_line}-{chunk.end_line})\nContent:\n```\n{chunk.content}\n```"
-                    
-                    target_chunk = chunk
-                    # Gather ALL usages around this line (+/- 1 for decorator/injection jitter)
-                    for usage in chunk.usages:
-                        if abs(usage.line - line) <= 1:
-                            target_usages.append(usage)
-                    break
-                    
-            if target_chunk and target_usages:
-                edges = knowledge_graph.get_edges(source_id=target_chunk.id, type="call")
-                
-                resolved_definitions = []
-                
-                # Try to map all valid edges that match ANY of the captured usages
-                for usage in target_usages:
-                    target_edge = None
-                    for edge in edges:
-                        _, target_id, _, meta = edge
-                        # Match the line logic or name heuristic
-                        if meta.get("line") == usage.line or meta.get("match_type") == "name_match":
-                            target_edge = edge
-                            break
-                    
-                    if target_edge:
-                        _, target_id, _, _ = target_edge
-                        def_chunk = vector_store.get_chunk_by_id(project_root, target_id)
-                        if def_chunk:
-                            resolved_definitions.append((usage.name, def_chunk))
-                
-                # Deduplicate and prioritize by source language + file type
-                seen_ids = set()
-                deduped_defs = []
-                for name, dc in resolved_definitions:
-                    if dc["id"] not in seen_ids:
-                        seen_ids.add(dc["id"])
-                        deduped_defs.append((name, dc))
-                
-                if deduped_defs:
-                    # Sort candidates: same language first, then highest file priority
-                    deduped_defs.sort(key=lambda x: _rank_chunk_key(x[1], source_lang), reverse=True)
-                    
-                    output = []
-                    # Prioritize exact symbol_name match if provided
-                    if symbol_name:
-                        exact_matches = [dc for name, dc in deduped_defs if name == symbol_name]
-                        if exact_matches:
-                            deduped_defs = [(symbol_name, dc) for dc in exact_matches]
-                        else:
-                            # If no exact match found via line edges, try a GLOBAL exact fallback 
-                            # before giving up. This helps when imports are tricky or decorators weren't linked.
-                            global_matches = vector_store.find_chunks_by_symbol(project_root, symbol_name)
-                            if global_matches:
-                                global_matches.sort(key=lambda x: _rank_chunk_key(x, source_lang), reverse=True)
-                                deduped_defs = [(symbol_name, g) for g in global_matches]
-                            
-                    for name, dc in deduped_defs:
-                        output.append(f"Jump to '{name}' -> File: {dc['filename']} ({dc['start_line']}-{dc['end_line']})\nContent:\n```\n{dc['content']}\n```")
-                    return "\n---\n".join(output)
-                    
-        except Exception as e:
-            logger.error(f"AST-based definition resolution failed: {e}")
-            
-        # 2. Fallback to global symbol search if AST mapping failed or wasn't found
-        if symbol_name:
-            targets = vector_store.find_chunks_by_symbol(project_root, symbol_name)
-            if not targets:
-                # 3. Third Fallback: Try a broad usage search if even definition fails
-                usage_chunks = vector_store.find_chunks_with_usage(project_root, symbol_name)
-                if usage_chunks:
-                    # Prioritize source language and source code vs docs
-                    usage_chunks.sort(key=lambda x: _rank_chunk_key(x, source_lang), reverse=True)
-                    output = []
-                    for t in usage_chunks:
-                        output.append(f"Heuristic Reference Found -> File: {t['filename']} ({t['start_line']}-{t['end_line']})\nContent:\n```\n{t['content']}\n```")
-                    return "\n---\n".join(output)
-                return f"No definition or clear usage found for symbol '{symbol_name}'"
-            
-            # Sort global matches
-            targets.sort(key=lambda x: _rank_chunk_key(x, source_lang), reverse=True)
-            output = []
-            for t in targets:
-                output.append(f"File: {t['filename']} ({t['start_line']}-{t['end_line']})\nContent:\n```\n{t['content']}\n```")
-            return "\n---\n".join(output)
-        
-        return "Please provide a symbol_name to find its definition if line-based AST mapping fails."
-    except Exception as e:
-        return f"Error finding definition: {e}"
 
 @mcp.tool()
 async def find_references(symbol_name: str, root_path: str = ".") -> str:
     """
     Finds all locations where a specific symbol is used or called.
-    
+
     BEST FOR:
     - Assessing the impact of a refactor or breaking change.
     - Finding examples of how a utility function is utilized in real scenarios.
     - Tracking middleware dependencies (e.g. FastAPI `Depends()`, standard decorators).
-    
-    Note: Tracking dynamic middleware injection requires that `refresh_index` with `force_full_scan=True` is run on the workspace.
-    
+
+    Note: Tracking dynamic middleware injection requires that `refresh_index` with
+    `force_full_scan=True` is run on the workspace.
+
     Args:
         symbol_name: The exact name of the symbol to track references for.
         root_path: Project root context.
     """
-    return await _find_references(symbol_name, root_path)
+    return await find_references_impl(symbol_name, _get_ctx(), root_path)
 
-async def _find_references(symbol_name: str, root_path: str = ".") -> str:
-    try:
-        project_root = normalize_path(root_path)
-        # 1. Find the chunk(s) defining the symbol
-        def_chunks = vector_store.find_chunks_by_symbol(project_root, symbol_name)
-        if not def_chunks:
-            # 2. Fallback: Symbol might be external (e.g., FastAPI Depends, decorators).
-            # Search usages across project chunks directly.
-            usage_chunks = vector_store.find_chunks_with_usage(project_root, symbol_name)
-            if not usage_chunks:
-                return f"Symbol '{symbol_name}' not found locally or in project usages."
-
-            # If we originated from a specific file, we should try to discover its language
-            # but _find_references doesn't take a source filename.
-            # We will just prioritize source code over documentation globally.
-            usage_chunks.sort(key=lambda x: _rank_chunk_key(x), reverse=True)
-
-            all_refs = []
-            for c in usage_chunks:
-                # Output format similar to regular usage edges
-                all_refs.append(f"Referenced (external/unlinked) in {c['filename']} at line {c['start_line']} (Fallback Search)\nChunk: {c.get('symbol_name', 'N/A')}")
-            return "\n---\n".join(all_refs)
-
-        all_refs = []
-        for d in def_chunks:
-            edges = knowledge_graph.get_edges(target_id=d["id"], type="call")
-            # If multiple definitions exist, and we have edges, show them grouped.
-            if edges:
-                for edge in edges:
-                    source_id, _, _, meta = edge
-                    source_chunk = vector_store.get_chunk_by_id(project_root, source_id)
-                    if source_chunk:
-                        match_type = meta.get("match_type", "unknown")
-                        confidence = "High" if match_type == "explicit_import" else "Low"
-                        # Prioritize source files
-                        all_refs.append({
-                            "priority": _get_file_priority(source_chunk["filename"]),
-                            "text": f"Referenced in {source_chunk['filename']} at line {meta.get('line', '??')} ({confidence} Confidence: {match_type})\nContext: {meta.get('context', 'N/A')}"
-                        })
-
-        if not all_refs:
-            return f"Symbol '{symbol_name}' found at {def_chunks[0]['filename']} L{def_chunks[0]['start_line']}, but no references were discovered in the knowledge graph."
-
-        # Sort by priority and format
-        all_refs.sort(key=lambda x: x["priority"], reverse=True)
-        return "\n---\n".join([r["text"] for r in all_refs])
-    except Exception as e:
-        return f"Error finding references: {e}"
 
 if __name__ == "__main__":
-    # Apply stdout protection only when running as a server
+    # Apply stdout protection only when running as a server process.
     builtins.print = safe_print
     mcp.run()

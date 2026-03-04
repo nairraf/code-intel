@@ -1,6 +1,6 @@
 # Project Progress
 
-## Current Focus: Stability & Environment Reliability
+## Current Focus: Code Quality Wave 3
 
 ### Completed Tasks
 
@@ -24,6 +24,7 @@
 - [x] **Security Hardening: Remediation of Audit Findings** (SQLi, Pickle, Path Traversal).
 - [x] **Quality Audit**: Performed comprehensive code quality review (12 refactoring opportunities identified).
 - [x] **Code Quality (Wave 1)**: Remediated prioritized technical debt in configuration, storage, and server logic, improving maintainability.
+- [x] **Code Quality (Wave 2)**: Decomposed monolithic `server.py` into `src/tools/` sub-modules, `src/indexer.py`, and `src/context.py` (AppContext DI). Removed all "God" terminology. 98 tests passing at **83% coverage**.
 
 ### In Progress
 

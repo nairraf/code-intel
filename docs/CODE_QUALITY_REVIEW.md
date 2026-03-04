@@ -14,7 +14,7 @@ The codebase is well-structured overall — good separation between parsing, sto
 
 ## 🔴 High Priority
 
-### 1. God Module: `server.py` (577 lines, 21 functions)
+### 1. Monolithic Module: `server.py` (577 lines, 21 functions)
 
 [server.py](file:///d:/Development/code-intel/src/server.py) mixes **four unrelated concerns**:
 
@@ -256,7 +256,7 @@ Simple copy-paste artifact.
 
 | # | Finding | Severity | Effort | Impact | Status (2026-02-24) |
 |---|---------|----------|--------|--------|---------------------|
-| 1 | God module `server.py` | 🔴 | Large | Testability, maintainability | ❌ Open — still 576 lines |
+| 1 | Monolithic module `server.py` | 🔴 | Large | Testability, maintainability | ❌ Open — still 576 lines |
 | 2 | Duplicated sorting lambda ×5 | 🔴 | Small | DRY, bug risk | ❌ Open — 5 occurrences of `_get_file_priority` lambda remain |
 | 3 | Global singleton instantiation | 🔴 | Medium | Testability, lifecycle | ❌ Open — module-level globals unchanged |
 | 4 | SQLite connection-per-call | 🟡 | Small | Performance | ❌ Open — `knowledge_graph.py` still opens new connection every call |

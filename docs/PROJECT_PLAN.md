@@ -71,5 +71,5 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 ### Milestone 5: Code Quality & Refactoring (In Progress)
 
 - [x] **Wave 1: Quick Wins** (Sorting logic, inline imports, exception handling, config bug).
-- [ ] **Wave 2: Structural Decomposition** (God module `server.py` → granular tools).
+- [x] **Wave 2: Structural Decomposition** (`server.py` → `src/tools/`, `src/indexer.py`, `src/context.py`; AppContext DI container; 83% test coverage).
 - [ ] **Wave 3: Performance & Efficiency** (SQLite connection pooling, parse caching).
