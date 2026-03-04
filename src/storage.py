@@ -4,6 +4,7 @@ import re
 import hashlib
 import logging
 import json
+import threading
 from collections import Counter
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -32,6 +33,7 @@ class VectorStore:
         self.db = lancedb.connect(uri)
         self.embedding_dims = EMBEDDING_DIMENSIONS
         self._tables = {}
+        self._lock = threading.Lock()
 
     def _get_table_name(self, project_root: str) -> str:
         """Generates a stable, unique table name for a given project root."""
@@ -43,39 +45,56 @@ class VectorStore:
         """Helper to safely fetch a table or None if it doesn't exist."""
         table_name = self._get_table_name(project_root)
         
-        # Check cache first
-        if table_name in self._tables:
-            return self._tables[table_name]
-
-        # Robustly check for table existence
-        try:
-            all_tables = self.db.list_tables()
-            if table_name not in all_tables:
+        with self._lock:
+            # Check cache first
+            if table_name in self._tables:
+                return self._tables[table_name]
+    
+            # Robustly check for table existence
+            try:
+                all_tables = self.db.list_tables()
+                if table_name not in all_tables:
+                    # Final fallback check
+                    if table_name not in self.db.table_names():
+                        return None
+            except Exception:
+                try:
+                    if table_name not in self.db.table_names():
+                        return None
+                except:
+                    return None
+                    
+            try:
+                table = self.db.open_table(table_name)
+                self._tables[table_name] = table
+                return table
+            except Exception:
                 return None
-        except Exception:
-             # Final fallback for some LanceDB versions
-             try:
-                 if table_name not in self.db.table_names():
-                     return None
-             except:
-                 return None
-                 
-        table = self.db.open_table(table_name)
-        self._tables[table_name] = table
-        return table
 
     def _ensure_table(self, table_name: str):
         """Creates the table if it doesn't exist."""
-        if table_name in self._tables:
-            return self._tables[table_name]
+        with self._lock:
+            if table_name in self._tables:
+                return self._tables[table_name]
+                
+            try:
+                all_tables = self.db.list_tables()
+                if table_name not in all_tables:
+                    # Double check via table_names
+                    if table_name not in self.db.table_names():
+                        self.db.create_table(table_name, schema=self._get_schema())
+            except Exception as e:
+                # If it already exists, just ignore and open it
+                if "already exists" not in str(e).lower():
+                    logger.error(f"Error checking/creating table {table_name}: {e}")
             
-        all_tables = self.db.list_tables()
-        if table_name not in all_tables:
-            self.db.create_table(table_name, schema=self._get_schema())
-        
-        table = self.db.open_table(table_name)
-        self._tables[table_name] = table
-        return table
+            try:
+                table = self.db.open_table(table_name)
+                self._tables[table_name] = table
+                return table
+            except Exception as e:
+                logger.error(f"Failed to open table {table_name}: {e}")
+                raise
 
     def clear_caches(self):
         """Resets the internal table handle cache."""
