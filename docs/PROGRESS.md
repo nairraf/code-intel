@@ -1,6 +1,6 @@
 # Project Progress
 
-## Current Focus: Code Quality Wave 3
+## Current Focus: Release v1.0.1 Prep & Professional Standards
 
 ### Completed Tasks
 
@@ -27,7 +27,8 @@
 - [x] **Code Quality (Wave 2)**: Decomposed monolithic `server.py` into `src/tools/` sub-modules, `src/indexer.py`, and `src/context.py` (AppContext DI). Removed all "God" terminology. 98 tests passing at **83% coverage**.
 - [2026-03-04] **Wave 3: Core Refactor**: Extracted logic from `server.py` into specialized tools. Implemented Scoping Strategy pattern and Parse Caching for 50%+ speedup.
 - [x] **Wave 4: Production-Grade Scaling**: Implemented LanceDB table handle caching and SQLite transaction batching for KnowledgeGraph writes. Standardized path normalization and fixed a critical concurrency race condition for robust Windows support.
-- [2026-03-04] **Wave 5: Secondary Remediation**: Normalizing test coverage across extracted sub-modules (Search @ 80%+) and securing the CI pipeline with automated secret scanning.
+- [x] **Wave 5: Secondary Remediation**: Normalizing test coverage across extracted sub-modules (Search @ 80%+) and securing the CI pipeline with automated secret scanning (Gitleaks).
+- [x] **Milestone 4: Deployment & DX Enhancements**: Added MIT License, GitHub Release automation, and Community Health standards (Conduct, Contributing, Security).
 
 ### In Progress
 
