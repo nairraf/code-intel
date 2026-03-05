@@ -77,3 +77,14 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 - [x] **Wave 3: Performance & Core Refactor** (Strategy Pattern, Persistence, Pass 2 Caching).
 - [x] **Wave 4: Production-Grade Scaling** (LanceDB Caching, SQLite Transaction Batching).
 - [x] **Wave 5: Secondary Remediation** (Sub-module test normalization, CI security automation).
+- [ ] **Wave 6: Enhanced Agent Observability** (Index Metadata & Git Summaries).
+
+### Milestone 6: Agent Navigation & Health
+
+- [ ] **Phase 6.1: Indexing Intelligence**
+  - [ ] Persist last index runtime, type, and embedding model in LanceDB.
+  - [ ] Add "Codebase Freshness" spot-check metrics.
+- [ ] **Phase 6.2: Git Activity Insight**
+  - [ ] Integrate latest commit summary and repository "dirty" status into `get_stats`.
+- [ ] **Phase 6.3: Architectural Guardian**
+  - [ ] Automated 200/50 rule violation reporting for large files/methods.

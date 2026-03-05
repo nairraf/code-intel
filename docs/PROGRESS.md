@@ -43,6 +43,7 @@
 ### Upcoming
 
 - [ ] Advanced linking & discovery (Phase 3.6).
+- [ ] **Milestone 6: Agent Observability** (Index Metadata, Git activity, Rule 200/50 checks).
 
 ### Verification Status
 
