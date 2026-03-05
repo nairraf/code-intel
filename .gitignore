@@ -24,3 +24,13 @@ tmp_lancedb/
 
 # Environment variables
 .env
+.env*
+!.env-example
+
+# Data and Databases
+*.lance
+*.sqlite
+*.db
+lancedb/
+**/lancedb/
+**/chunks_*.lance/
