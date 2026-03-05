@@ -20,12 +20,25 @@ ollama pull unclemusclez/jina-embeddings-v2-base-code
 ```
 
 ### 2. Installation
-Clone the repository and synchronize the environment:
+
+Choose one of the following methods to set up the project:
+
+#### Option A: Clone the Repository (Recommended)
+Best for active development and staying up to date.
 ```bash
 git clone https://github.com/nairraf/code-intel.git
 cd code-intel
 uv sync
 ```
+
+#### Option B: Download Release (Quick Start)
+Best for a one-time setup or if you don't have Git installed.
+1. Download the latest [Source ZIP or Tarball](https://github.com/nairraf/code-intel/releases/latest).
+2. Extract the archive to your desired location.
+3. Open a terminal in the folder and run:
+   ```bash
+   uv sync
+   ```
 
 ### 3. MCP Configuration
 Add the following to your AI client's MCP settings (e.g., Claude Desktop, Cursor, or Antigravity `mcp_config.json`). Replace `/path/to/code-intel` with the absolute path to this project.
