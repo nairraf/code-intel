@@ -44,7 +44,7 @@
 
 - [ ] Advanced linking & discovery (Phase 3.6).
 - [ ] Advanced linking & discovery (Phase 3.6).
-- [ ] **Milestone 6: Agent Observability** (Index Metadata, Git activity, Rule 200/50 checks). Detailed plan in [API_CONTRACT-stats_enhancements.md](file:///d:/Development/code-intel/docs/architecture/API_CONTRACT-stats_enhancements.md).
+- [ ] **Milestone 6: Agent Observability** (Index Metadata, Git activity, Rule 200/50 checks). Detailed plan in [architecture/API_CONTRACT-stats_enhancements.md](architecture/API_CONTRACT-stats_enhancements.md).
 
 ### Verification Status
 
