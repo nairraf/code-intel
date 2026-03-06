@@ -17,7 +17,7 @@ from typing import Optional
 from fnmatch import fnmatch
 
 from .config import IGNORE_DIRS, SUPPORTED_EXTENSIONS
-from .git_utils import batch_get_git_info
+from .git_utils import batch_get_git_info, get_current_git_commit, check_git_dirty
 from .utils import normalize_path
 from .context import AppContext
 
@@ -218,6 +218,21 @@ async def refresh_index_impl(
         ctx.knowledge_graph.commit_transaction()
     except Exception as e:
         logger.error(f"Linking transaction failed: {e}")
+
+    try:
+        from datetime import datetime, timezone
+        commit = await get_current_git_commit(project_root_str)
+        is_dirty = await check_git_dirty(project_root_str)
+        metadata = {
+            "indexed_at": datetime.now(timezone.utc).isoformat(),
+            "commit_hash": commit,
+            "is_dirty": is_dirty,
+            "scan_type": "full" if force_full_scan else "incremental",
+            "model_name": ctx.ollama.model_name if hasattr(ctx.ollama, "model_name") else "unknown"
+        }
+        ctx.vector_store.save_index_metadata(project_root_str, metadata)
+    except Exception as e:
+        logger.error(f"Failed to persist index metadata: {e}")
 
     final_count = ctx.vector_store.count_chunks(project_root_str)
     scan_type = "Full Rebuild" if force_full_scan else "Incremental Update"

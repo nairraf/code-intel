@@ -9,6 +9,14 @@ async def test_get_detailed_stats_enhancements():
     project_root = "/mock/project"
 
     mock_ctx = MagicMock()
+    mock_ctx.vector_store.get_index_metadata.return_value = {
+        "indexed_at": "2026-03-05T10:00:00Z",
+        "commit_hash": "a1b2c3d",
+        "is_dirty": False,
+        "scan_type": "full",
+        "model_name": "bge-m3"
+    }
+
     mock_ctx.vector_store.get_detailed_stats.return_value = {
         "chunk_count": 100,
         "file_count": 10,
@@ -25,19 +33,29 @@ async def test_get_detailed_stats_enhancements():
         "test_gaps": [
             {"symbol": "risky_func", "complexity": 15, "file": "main.py"}
         ],
-        "stale_files_count": 3
+        "stale_files_count": 3,
+        "rule_violations": [
+            {"file": "large_file.py", "lines": 250, "rule": "200/50 Rule: File exceeds 200 lines"}
+        ]
     }
 
-    with patch('src.tools.stats.get_active_branch', return_value="feat/new-feature"):
+    with patch('src.tools.stats.get_active_branch', return_value="feat/new-feature"), \
+         patch('src.tools.stats.get_current_git_commit', return_value="f89a2b"), \
+         patch('src.tools.stats.check_git_dirty', return_value=True):
+         
         result = await get_stats_impl(project_root, ctx=mock_ctx)
 
         assert "Dependency Hubs" in result
         assert "utils.py (10 imports)" in result
         assert "Test Gaps" in result
         assert "risky_func (15)" in result
+        assert "Rule Violations" in result
+        assert "large_file.py" in result
         assert "Project Pulse:" in result
-        assert "Active Branch: feat/new-feature" in result
-        assert "Stale Files:   3" in result
+        assert "Active Branch:   feat/new-feature" in result
+        assert "Stale Files:     3" in result
+        assert "Freshness:       STALE" in result  # Because hashes don't match
+        assert "f89a2b" in result
 
 
 @pytest.mark.asyncio

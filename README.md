@@ -61,7 +61,7 @@ Add the following to your AI client's MCP settings (e.g., Claude Desktop, Cursor
 
 While many tools offer basic semantic search, `code-intel` is purpose-built to enforce strict architectural rules and support advanced software engineering methodologies:
 
-*   **Project Pulse & Health Metrics**: Go beyond simple search. The internal engine actively identifies "Dependency Hubs" and "High-Risk Symbols" (files with high complexity but low test coverage), guiding refactoring efforts and enforcing test-gated workflows.
+*   **Project Pulse & Health Metrics**: Go beyond simple search. The internal engine actively identifies "Dependency Hubs", "High-Risk Symbols" (files with high complexity but low test coverage), tracking of Git activity alongside index freshness, and automated architectural validation (such as 200/50 file size rules). This directly guides refactoring efforts and enforces test-gated workflows.
 *   **Deep Framework Analysis**: Standard indexers often fail at mapping dynamic patterns. This server specifically tracks dynamic dependency injection (like Python's `Depends()`) and framework-specific middleware, allowing developers to keep business logic pure and fully mockable.
 *   **Targeted Re-Indexing**: Working in a massive mono-repo? You don't need to re-index the entire universe. Use targeted `include`/`exclude` patterns to update the knowledge graph on-the-fly for only the microservice or module you are actively developing.
 *   **Contract-First Validation**: By exposing the precise call graph and interface definitions, `code-intel` helps validate that implementations adhere to established API contracts and structural patterns before code is committed.
@@ -147,11 +147,11 @@ While we support 80+ languages via Tree-sitter, we provide optimized resolution 
 ---
 
 ## 🚀 Recent Updates
+* **Agent Observability**: Integrated Git workspace activity ("dirty" status, commit hooks) with local Index Metadata to provide agents an immediate "Codebase Freshness" spot-check via `get_stats`.
+* **Architectural Guardian**: Enforced the 200/50 rule directly within `get_stats`, automatically identifying codebase violations (files > 200 lines).
 * **Production Scaling**: LanceDB table handle caching and batched SQLite transactions.
 * **Robust Windows Support**: Fixed concurrency race conditions and standardized path normalization.
-* **Scope Tuning**: Added `include`/`exclude` glob patterns for specialized indexing.
 * **Security Hardening**: Integrated automated secret scanning (Gitleaks) into CI.
-* **Professional Standards**: Added License, Release Automation, and Community Health files.
 
 ---
 

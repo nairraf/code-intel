@@ -9,6 +9,15 @@ class SymbolUsage(BaseModel):
     context: str = "call"  # call, type_hint, instantiation, inheritance
     target_file: Optional[str] = None # Populated after resolution
 
+class IndexMetadata(BaseModel):
+    """Metadata about the state of the codebase at the time of indexing."""
+    indexed_at: str
+    commit_hash: Optional[str] = None
+    is_dirty: bool = False
+    scan_type: str = "full"
+    model_name: str = "unknown"
+
+
 class CodeChunk(BaseModel):
     """Represents a meaningful block of code (function, class, or text block)."""
     id: str = Field(..., description="Unique hash string of the chunk")

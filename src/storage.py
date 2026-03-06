@@ -41,6 +41,12 @@ class VectorStore:
         path_hash = hashlib.sha256(normalized_root.encode('utf-8')).hexdigest()[:32]
         return f"chunks_{path_hash}"
 
+    def _get_metadata_table_name(self, project_root: str) -> str:
+        """Generates a stable, unique table name for project metadata."""
+        normalized_root = normalize_path(project_root)
+        path_hash = hashlib.sha256(normalized_root.encode('utf-8')).hexdigest()[:32]
+        return f"metadata_{path_hash}"
+
     def _get_table_or_none(self, project_root: str):
         """Helper to safely fetch a table or None if it doesn't exist."""
         table_name = self._get_table_name(project_root)
@@ -269,6 +275,40 @@ class VectorStore:
         
         return table.count_rows()
 
+    def get_index_metadata(self, project_root: str) -> Optional[dict]:
+        """Retrieves the index metadata for a project."""
+        table_name = self._get_metadata_table_name(project_root)
+        try:
+            if table_name not in self.db.table_names():
+                return None
+            table = self.db.open_table(table_name)
+            data = table.search().limit(1).to_list()
+            return data[0] if data else None
+        except Exception as e:
+            # logger.warning(f"Failed to get index metadata: {e}")
+            return None
+
+    def save_index_metadata(self, project_root: str, metadata: dict):
+        """Saves the index metadata for a project."""
+        table_name = self._get_metadata_table_name(project_root)
+        try:
+            if table_name in self.db.table_names():
+                self.db.drop_table(table_name)
+                
+            schema = pa.schema([
+                pa.field("indexed_at", pa.string()),
+                pa.field("commit_hash", pa.string()),
+                pa.field("is_dirty", pa.bool_()),
+                pa.field("scan_type", pa.string()),
+                pa.field("model_name", pa.string())
+            ])
+            
+            table = self.db.create_table(table_name, schema=schema)
+            metadata["commit_hash"] = metadata.get("commit_hash") or ""
+            table.add([metadata])
+        except Exception as e:
+            logger.error(f"Failed to save index metadata: {e}")
+
     def get_project_hashes(self, project_root: str) -> dict:
         """Returns a mapping of {filename: content_hash}."""
         table = self._get_table_or_none(project_root)
@@ -304,7 +344,7 @@ class VectorStore:
             return {}
 
         # Select ONLY the columns we need to process to avoid huge memory/time costs
-        columns = ["filename", "language", "complexity", "symbol_name", "dependencies", "related_tests", "last_modified", "author"]
+        columns = ["filename", "language", "complexity", "symbol_name", "dependencies", "related_tests", "last_modified", "author", "end_line"]
         try:
             data = table.search().select(columns).to_arrow()
         except Exception as e:
@@ -320,6 +360,7 @@ class VectorStore:
         languages = data.column("language").to_pylist()
         complexities = data.column("complexity").to_pylist()
         symbol_names = data.column("symbol_name").to_pylist()
+        end_lines = data.column("end_line").to_pylist()
 
         lang_counts = Counter(languages)
         unique_files = len(set(filenames))
@@ -370,12 +411,27 @@ class VectorStore:
 
         # Identify high-risk symbols (top 5 by complexity)
         records = []
+        file_max_lines = {}
         for i in range(len(data)):
+            fname = filenames[i]
+            eline = int(end_lines[i] or 0)
+            if fname not in file_max_lines or eline > file_max_lines[fname]:
+                file_max_lines[fname] = eline
+                
             if complexities[i] > 0:
                 records.append({
                     "symbol": symbol_names[i] or filenames[i],
                     "complexity": int(complexities[i]),
                     "file": filenames[i]
+                })
+        
+        rule_violations = []
+        for fname, max_line in file_max_lines.items():
+            if max_line > 200:
+                rule_violations.append({
+                    "file": fname,
+                    "lines": max_line,
+                    "rule": "200/50 Rule: File exceeds 200 lines"
                 })
         
         high_risk = sorted(records, key=lambda x: x["complexity"], reverse=True)[:5]
@@ -390,5 +446,6 @@ class VectorStore:
             "high_risk_symbols": high_risk,
             "dependency_hubs": [{"file": f, "count": c} for f, c in dep_hubs],
             "test_gaps": test_gaps,
-            "stale_files_count": stale_count
+            "stale_files_count": stale_count,
+            "rule_violations": rule_violations
         }

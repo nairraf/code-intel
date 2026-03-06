@@ -123,3 +123,50 @@ async def test_batch_get_git_info_repo():
         
         results = await batch_get_git_info([str(test_file)], tmpdir)
         assert results[str(test_file)]["author"] == "Test"
+
+@pytest.mark.asyncio
+async def test_get_current_git_commit():
+    from src.git_utils import get_current_git_commit
+    with tempfile.TemporaryDirectory() as tmpdir:
+        subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=tmpdir)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmpdir)
+        
+        test_file = Path(tmpdir) / "test.py"
+        test_file.write_text("print('hi')\n")
+        subprocess.run(["git", "add", "test.py"], cwd=tmpdir, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "msg"], cwd=tmpdir, check=True, capture_output=True)
+        
+        commit = await get_current_git_commit(tmpdir)
+        assert commit is not None
+        assert len(commit) >= 7
+
+@pytest.mark.asyncio
+async def test_get_current_git_commit_unknown():
+    from src.git_utils import get_current_git_commit
+    with tempfile.TemporaryDirectory() as tmpdir:
+        commit = await get_current_git_commit(tmpdir)
+        assert commit is None
+
+@pytest.mark.asyncio
+async def test_check_git_dirty():
+    from src.git_utils import check_git_dirty
+    with tempfile.TemporaryDirectory() as tmpdir:
+        subprocess.run(["git", "init"], cwd=tmpdir, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=tmpdir)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmpdir)
+        
+        test_file = Path(tmpdir) / "test.py"
+        test_file.write_text("print('hi')\n")
+        subprocess.run(["git", "add", "test.py"], cwd=tmpdir, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "msg"], cwd=tmpdir, check=True, capture_output=True)
+        
+        # Clean state
+        is_dirty = await check_git_dirty(tmpdir)
+        assert is_dirty is False
+        
+        # Dirty state
+        test_file.write_text("print('hello')\n")
+        is_dirty = await check_git_dirty(tmpdir)
+        assert is_dirty is True
+

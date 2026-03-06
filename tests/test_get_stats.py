@@ -27,7 +27,8 @@ async def test_get_stats_active():
 
         assert "Total Chunks:     42" in result
         assert "Stats for:" in result
-        assert "Active Branch: main" in result
+        assert "Active Branch:" in result
+        assert "main" in result
         assert "Project Pulse:" in result
 
 

@@ -10,7 +10,7 @@ import traceback
 from pathlib import Path
 
 from ..context import AppContext
-from ..git_utils import get_active_branch
+from ..git_utils import get_active_branch, get_current_git_commit, check_git_dirty
 
 from ..utils import normalize_path
 
@@ -53,14 +53,53 @@ async def get_stats_impl(root_path: str = ".", ctx: AppContext = None) -> str:
             for g in stats.get("test_gaps", [])[:5]
         )
 
-        branch = await get_active_branch(project_root_str)
-        pulse = (
-            f"\n\nProject Pulse:\n"
-            f"  - Active Branch: {branch}\n"
-            f"  - Stale Files:   {stats.get('stale_files_count', 0)}"
+        rule_violations = "\n".join(
+            f"  - {v['file']} ({v['rule']})"
+            for v in stats.get("rule_violations", [])
         )
+        if not rule_violations:
+            rule_violations = "  - None"
 
-        return f"{summary}\n\nDependency Hubs:\n{hubs}\n\nTest Gaps:\n{test_gaps}{pulse}"
+        branch = await get_active_branch(project_root_str)
+        
+        # Check freshness
+        meta = ctx.vector_store.get_index_metadata(project_root_str)
+        freshness_status = "UNKNOWN"
+        freshness_reason = "No index metadata found."
+        
+        if meta:
+            current_commit = await get_current_git_commit(project_root_str)
+            is_dirty = await check_git_dirty(project_root_str)
+            
+            idx_commit = meta.get("commit_hash")
+            if not current_commit:
+                freshness_status = "UNKNOWN"
+                freshness_reason = "Not a git repository or git not available."
+            elif current_commit != idx_commit:
+                freshness_status = "STALE"
+                freshness_reason = f"Current commit ({current_commit[:7] if current_commit else 'None'}) differs from indexed commit ({idx_commit[:7] if idx_commit else 'None'})."
+            elif is_dirty:
+                freshness_status = "DIRTY"
+                freshness_reason = "Repository has uncommitted changes since last index."
+            else:
+                freshness_status = "FRESH"
+                freshness_reason = "Index matches current HEAD."
+
+            pulse = (
+                f"\n\nProject Pulse:\n"
+                f"  - Active Branch:   {branch}\n"
+                f"  - Stale Files:     {stats.get('stale_files_count', 0)}\n"
+                f"  - Last Indexed:    {meta.get('indexed_at', 'Unknown')}\n"
+                f"  - Freshness:       {freshness_status} ({freshness_reason})"
+            )
+        else:
+            pulse = (
+                f"\n\nProject Pulse:\n"
+                f"  - Active Branch: {branch}\n"
+                f"  - Stale Files:   {stats.get('stale_files_count', 0)}\n"
+            )
+
+        return f"{summary}\n\nDependency Hubs:\n{hubs}\n\nTest Gaps:\n{test_gaps}\n\nRule Violations:\n{rule_violations}{pulse}"
 
     except Exception as e:
         logger.error(f"get_stats failed: {e}\n{traceback.format_exc()}")

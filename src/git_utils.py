@@ -162,3 +162,82 @@ async def get_active_branch(repo_root: str) -> str:
             except:
                 pass
     return "unknown"
+
+async def get_current_git_commit(repo_root: str) -> Optional[str]:
+    """Get the current HEAD commit hash quickly."""
+    process = None
+    try:
+        abs_repo = str(Path(repo_root).resolve())
+        if not os.path.isdir(abs_repo):
+             return None
+             
+        process = await asyncio.create_subprocess_exec(
+            "git", "rev-parse", "HEAD",
+            cwd=abs_repo,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            env=_GIT_ENV
+        )
+        stdout, _ = await asyncio.wait_for(process.communicate(), timeout=2.0)
+        
+        if process.returncode == 0:
+            return stdout.decode().strip()
+    except asyncio.TimeoutError:
+        logger.warning(f"Git commit lookup timed out for {repo_root}")
+        if process:
+            try:
+                process.kill()
+                await asyncio.wait_for(process.wait(), timeout=1)
+            except:
+                pass
+    except Exception as e:
+        logger.error(f"Error in get_current_git_commit: {e}")
+    finally:
+        if process and process.returncode is None:
+            try:
+                process.kill()
+                await process.wait()
+            except:
+                pass
+    return None
+
+async def check_git_dirty(repo_root: str) -> bool:
+    """Check if the git workspace has uncommitted changes quickly."""
+    process = None
+    try:
+        abs_repo = str(Path(repo_root).resolve())
+        if not os.path.isdir(abs_repo):
+             return False
+             
+        process = await asyncio.create_subprocess_exec(
+            "git", "status", "--porcelain",
+            cwd=abs_repo,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            env=_GIT_ENV
+        )
+        stdout, _ = await asyncio.wait_for(process.communicate(), timeout=2.0)
+        
+        if process.returncode == 0:
+            return bool(stdout.decode().strip())
+    except asyncio.TimeoutError:
+        logger.warning(f"Git dirty check timed out for {repo_root}")
+        if process:
+            try:
+                process.kill()
+                await asyncio.wait_for(process.wait(), timeout=1)
+            except:
+                pass
+    except Exception as e:
+        logger.error(f"Error in check_git_dirty: {e}")
+    finally:
+        if process and process.returncode is None:
+            try:
+                process.kill()
+                await process.wait()
+            except:
+                pass
+    return False
+
