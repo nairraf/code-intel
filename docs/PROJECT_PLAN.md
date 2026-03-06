@@ -69,6 +69,8 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 
 - [ ] One-click installers/packages.
 - [ ] Comprehensive CLI dashboard.
+- [ ] **Structural Impact Analysis** (Blast Radius for Refactoring).
+- [ ] **Deep AST Support for DI frameworks** (FastAPI Depends / Riverpod).
 
 ### Milestone 5: Code Quality & Refactoring (In Progress)
 
@@ -81,10 +83,10 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 
 ### Milestone 6: Agent Navigation & Health
 
-- [ ] **Phase 6.1: Indexing Intelligence**
-  - [ ] Persist last index runtime, type, and embedding model in LanceDB.
-  - [ ] Add "Codebase Freshness" spot-check metrics.
-- [ ] **Phase 6.2: Git Activity Insight**
-  - [ ] Integrate latest commit summary and repository "dirty" status into `get_stats`.
-- [ ] **Phase 6.3: Architectural Guardian**
-  - [ ] Automated 200/50 rule violation reporting for large files/methods.
+- [x] **Phase 6.1: Indexing Intelligence**
+  - [x] Persist last index runtime, type, and embedding model in LanceDB.
+  - [x] Add "Codebase Freshness" spot-check metrics.
+- [x] **Phase 6.2: Git Activity Insight**
+  - [x] Integrate latest commit summary and repository "dirty" status into `get_stats`.
+- [x] **Phase 6.3: Architectural Guardian**
+  - [x] Automated 200/50 rule violation reporting for large files/methods.

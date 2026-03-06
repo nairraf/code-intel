@@ -40,11 +40,13 @@
 - [x] **Windows Stability**: Fixed FastMCP busy-loop CPU spike (pinned `fastmcp==2.13.3`).
 - [x] **Codebase Cleanup**: Removed diagnostic scripts and standardized environment isolation.
 
+- [x] **Milestone 6: Agent Observability** (Index Metadata, Git activity, Rule 200/50 checks). Detailed plan in [architecture/API_CONTRACT-stats_enhancements.md](architecture/API_CONTRACT-stats_enhancements.md).
+
 ### Upcoming
 
 - [ ] Advanced linking & discovery (Phase 3.6).
-- [ ] Advanced linking & discovery (Phase 3.6).
-- [ ] **Milestone 6: Agent Observability** (Index Metadata, Git activity, Rule 200/50 checks). Detailed plan in [architecture/API_CONTRACT-stats_enhancements.md](architecture/API_CONTRACT-stats_enhancements.md).
+- [ ] Structural Impact Analysis (Blast Radius for Refactoring).
+- [ ] Deep AST Support for DI paradigms (FastAPI Depends / Riverpod).
 
 ### Verification Status
 
