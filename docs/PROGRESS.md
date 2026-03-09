@@ -48,9 +48,7 @@
 - [ ] Advanced linking & discovery (Phase 3.6).
 - [ ] Structural Impact Analysis (Blast Radius for Refactoring).
 - [ ] Deep AST Support for DI paradigms (FastAPI Depends / Riverpod).
-- [ ] Advanced linking & discovery (Phase 3.6).
-- [ ] **Milestone 6: Agent Observability** (Index Metadata, Git activity, Rule 200/50 checks). Detailed plan in [architecture/API_CONTRACT-stats_enhancements.md](architecture/API_CONTRACT-stats_enhancements.md).
-- [ ] **Milestone 7: Retrieval Precision & Agent Trust** (Source-first ranking, framework-aware reference semantics, query-intent guidance).
+- [ ] **Milestone 7: Retrieval Precision & Agent Trust** (Remaining work: optional source-biased mode, fuller edge-kind classification, scoped guidance examples).
 - [ ] **Milestone 8: Benchmarking & Decision Support** (Repeatable evaluation suite, agent-centric scoring, milestone exit criteria).
 - [ ] **Milestone 9: Agent Workflow Enablement** (Confidence-aware docs, path-scoped usage, cross-project adoption guidance).
 

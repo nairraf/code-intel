@@ -95,22 +95,22 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 
 Goal: Increase practical value for AI agents by reducing false-positive discovery, improving dynamic-framework navigation, and making result confidence easier to operationalize.
 
-- [ ] **Phase 7.1: Source-First Retrieval Ranking**
-  - [ ] Add ranking priors so implementation files outrank documentation for code-intent queries.
-  - [ ] De-prioritize `docs/` and report artifacts unless the query intent is explicitly documentation-oriented.
-  - [ ] Surface result classification metadata such as `source`, `test`, `docs`, and `report` in search results.
+- [x] **Phase 7.1: Source-First Retrieval Ranking**
+  - [x] Add ranking priors so implementation files outrank documentation for code-intent queries.
+  - [x] De-prioritize `docs/` and report artifacts unless the query intent is explicitly documentation-oriented.
+  - [x] Surface result classification metadata such as `source`, `test`, `docs`, and `report` in search results.
   - [ ] Add an optional source-biased search mode for agent workflows that need implementation candidates first.
-  - [ ] Validate improvements against benchmark queries where documentation currently outranks code.
-- [ ] **Phase 7.2: Framework-Aware Reference Semantics**
-  - [ ] Expand Python dependency-injection detection for FastAPI-style `Depends` flows.
+  - [x] Validate improvements against benchmark queries where documentation currently outranks code.
+- [x] **Phase 7.2: Framework-Aware Reference Semantics**
+  - [x] Expand Python dependency-injection detection for FastAPI-style `Depends` flows.
   - [ ] Classify graph relationships by reference kind: import, call, dependency-injection, decorator, and instantiation.
-  - [ ] Improve confidence labeling in reference results so agents can distinguish exact structural matches from heuristic matches.
-  - [ ] Add focused regression tests for framework-owned symbols and middleware-style registration paths.
-- [ ] **Phase 7.3: Query Intent & Agent Guidance**
-  - [ ] Add lightweight query-intent heuristics to distinguish code lookup from architecture/documentation exploration.
-  - [ ] Bias semantic retrieval toward source paths when the query expresses implementation intent.
+  - [x] Improve confidence labeling in reference results so agents can distinguish exact structural matches from heuristic matches.
+  - [x] Add focused regression tests for framework-owned symbols and middleware-style registration paths.
+- [x] **Phase 7.3: Query Intent & Agent Guidance**
+  - [x] Add lightweight query-intent heuristics to distinguish code lookup from architecture/documentation exploration.
+  - [x] Bias semantic retrieval toward source paths when the query expresses implementation intent.
   - [ ] Recommend scoped search patterns when the repository contains high-volume documentation noise.
-  - [ ] Expose guidance that helps agents choose between `search_code`, `find_definition`, and `find_references` based on intent.
+  - [x] Expose guidance that helps agents choose between `search_code`, `find_definition`, and `find_references` based on intent.
 
 ### Milestone 8: Benchmarking & Decision Support
 
