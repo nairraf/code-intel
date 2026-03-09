@@ -1,6 +1,6 @@
 # Project Progress
 
-## Current Focus: Release v1.0.1 Prep & Professional Standards
+## Current Focus: Roadmap Prioritization for Retrieval Precision, Agent Trust, and Benchmark-Guided Improvements
 
 ### Completed Tasks
 
@@ -29,6 +29,7 @@
 - [x] **Wave 4: Production-Grade Scaling**: Implemented LanceDB table handle caching and SQLite transaction batching for KnowledgeGraph writes. Standardized path normalization and fixed a critical concurrency race condition for robust Windows support.
 - [x] **Wave 5: Secondary Remediation**: Normalizing test coverage across extracted sub-modules (Search @ 80%+) and securing the CI pipeline with automated secret scanning (Gitleaks).
 - [x] **Milestone 4: Deployment & DX Enhancements**: Added MIT License, GitHub Release automation, and Community Health standards (Conduct, Contributing, Security).
+- [x] **Milestone 7: Retrieval Precision & Agent Trust (Wave 1)**: Implemented source-first retrieval bias, query-intent/result-type metadata, and clearer reference confidence/kind output for agent workflows. Added regression coverage and verified no suite regressions at **85% total coverage**.
 
 ### In Progress
 
@@ -47,6 +48,19 @@
 - [ ] Advanced linking & discovery (Phase 3.6).
 - [ ] Structural Impact Analysis (Blast Radius for Refactoring).
 - [ ] Deep AST Support for DI paradigms (FastAPI Depends / Riverpod).
+- [ ] Advanced linking & discovery (Phase 3.6).
+- [ ] **Milestone 6: Agent Observability** (Index Metadata, Git activity, Rule 200/50 checks). Detailed plan in [architecture/API_CONTRACT-stats_enhancements.md](architecture/API_CONTRACT-stats_enhancements.md).
+- [ ] **Milestone 7: Retrieval Precision & Agent Trust** (Source-first ranking, framework-aware reference semantics, query-intent guidance).
+- [ ] **Milestone 8: Benchmarking & Decision Support** (Repeatable evaluation suite, agent-centric scoring, milestone exit criteria).
+- [ ] **Milestone 9: Agent Workflow Enablement** (Confidence-aware docs, path-scoped usage, cross-project adoption guidance).
+
+### Planning Notes
+
+- [x] Reviewed external benchmark feedback in [`docs/reports/code_review/code-intel-evaluation-report.md`](docs/reports/code_review/code-intel-evaluation-report.md).
+- [x] Added a prioritized roadmap to [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md) focused on retrieval precision, benchmark repeatability, and agent workflow trust.
+- [x] Re-aligned architecture notes to the current Jina embedding model in [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md).
+- [x] Completed the first Milestone 7 implementation slice and recorded the reasoning review in [`docs/reports/security/SECURITY_REPORT-20260309.md`](docs/reports/security/SECURITY_REPORT-20260309.md).
+- [ ] Next planning checkpoint: decide whether to continue deeper framework-specific edge classification or shift focus back to other project work.
 
 ### Verification Status
 

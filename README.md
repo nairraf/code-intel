@@ -100,8 +100,12 @@ Our embedding cache drastically reduces latency. By storing "fingerprints" of yo
 ### Semantic "Meaning-Based" Search
 Go beyond simple keyword matching. Search for concepts like "how do we handle user authentication?" and find the relevant logic even if the exact words aren't used.
 
+The latest retrieval pipeline adds **source-first ranking** for implementation-oriented queries, helping code results outrank documentation noise in doc-heavy repositories. Search responses now also expose **Result Type** and **Query Intent** metadata so agents can reason about whether a hit is source, test, docs, or report content.
+
 ### Cross-File Architecture Graph
 A persistent knowledge graph tracks imports and function calls across your entire project. This enables precise "Jump to Definition" and "Find References" that work reliably across many files, including advanced structural tracking for Dart widget instantiations and Python dependency injection (`Depends()`).
+
+Reference tracing output now includes normalized confidence labels and explicit **Reference Kind** metadata, making it easier for agents to distinguish high-confidence structural matches from lower-confidence heuristic matches.
 
 ### Security & Quality Hardened
 Independently audited and remediated against OWASP Top 10 vulnerabilities. Includes robust sanitization for vector filters, safe JSON-based serialization, and strict path containment.
@@ -151,6 +155,9 @@ While we support 80+ languages via Tree-sitter, we provide optimized resolution 
 * **Architectural Guardian**: Enforced the 200/50 rule directly within `get_stats`, automatically identifying codebase violations (files > 200 lines).
 * **Production Scaling**: LanceDB table handle caching and batched SQLite transactions.
 * **Robust Windows Support**: Fixed concurrency race conditions and standardized path normalization.
+* **Scope Tuning**: Added `include`/`exclude` glob patterns for specialized indexing.
+* **Retrieval Precision**: Added source-first ranking, query-intent classification, and result-type metadata for better agent search behavior.
+* **Reference Clarity**: Added richer confidence and reference-kind reporting in `find_references` output.
 * **Security Hardening**: Integrated automated secret scanning (Gitleaks) into CI.
 
 ---

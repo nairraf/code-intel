@@ -8,7 +8,7 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 
 - **Parser**: Tree-sitter (multi-language support).
 - **Storage**: LanceDB (local vector storage).
-- **Embeddings**: BGE-M3 (via Ollama).
+- **Embeddings**: Jina Embeddings v2 Base Code via Ollama.
 - **Runtime**: Python 3.11+ with `fastmcp`.
 
 ## Milestones
@@ -90,3 +90,58 @@ A lightweight, high-performance MCP server providing semantic code search and AS
   - [x] Integrate latest commit summary and repository "dirty" status into `get_stats`.
 - [x] **Phase 6.3: Architectural Guardian**
   - [x] Automated 200/50 rule violation reporting for large files/methods.
+
+### Milestone 7: Retrieval Precision & Agent Trust
+
+Goal: Increase practical value for AI agents by reducing false-positive discovery, improving dynamic-framework navigation, and making result confidence easier to operationalize.
+
+- [ ] **Phase 7.1: Source-First Retrieval Ranking**
+  - [ ] Add ranking priors so implementation files outrank documentation for code-intent queries.
+  - [ ] De-prioritize `docs/` and report artifacts unless the query intent is explicitly documentation-oriented.
+  - [ ] Surface result classification metadata such as `source`, `test`, `docs`, and `report` in search results.
+  - [ ] Add an optional source-biased search mode for agent workflows that need implementation candidates first.
+  - [ ] Validate improvements against benchmark queries where documentation currently outranks code.
+- [ ] **Phase 7.2: Framework-Aware Reference Semantics**
+  - [ ] Expand Python dependency-injection detection for FastAPI-style `Depends` flows.
+  - [ ] Classify graph relationships by reference kind: import, call, dependency-injection, decorator, and instantiation.
+  - [ ] Improve confidence labeling in reference results so agents can distinguish exact structural matches from heuristic matches.
+  - [ ] Add focused regression tests for framework-owned symbols and middleware-style registration paths.
+- [ ] **Phase 7.3: Query Intent & Agent Guidance**
+  - [ ] Add lightweight query-intent heuristics to distinguish code lookup from architecture/documentation exploration.
+  - [ ] Bias semantic retrieval toward source paths when the query expresses implementation intent.
+  - [ ] Recommend scoped search patterns when the repository contains high-volume documentation noise.
+  - [ ] Expose guidance that helps agents choose between `search_code`, `find_definition`, and `find_references` based on intent.
+
+### Milestone 8: Benchmarking & Decision Support
+
+Goal: Turn external evaluation feedback into a repeatable quality gate that helps decide when tool investment creates enough cross-project value.
+
+- [ ] **Phase 8.1: Repeatable Retrieval Benchmark Suite**
+  - [ ] Create benchmark scenarios for definition lookup, reference recall, semantic precision, and documentation-noise suppression.
+  - [ ] Capture representative cases from external evaluations as reusable fixtures and expected outcomes.
+  - [ ] Add regression coverage for low-confidence Python DI and framework-registration patterns.
+- [ ] **Phase 8.2: Agent-Centric Scoring Model**
+  - [ ] Score benchmark results by precision, trustworthiness, narrowing effort, and usefulness to downstream agents.
+  - [ ] Add reporting that makes it clear which capabilities are safe for first-pass use versus verification-required use.
+  - [ ] Track whether improvements reduce follow-up manual search steps for agents.
+- [ ] **Phase 8.3: Roadmap Decision Signals**
+  - [ ] Define milestone exit criteria for search ranking quality, reference confidence, and benchmark pass thresholds.
+  - [ ] Add release-readiness signals that show when the tool is strong enough to justify focused investment over parallel project work.
+  - [ ] Summarize benchmark deltas in project status artifacts for easier prioritization reviews.
+
+### Milestone 9: Agent Workflow Enablement
+
+Goal: Make `code-intel` more predictable and more valuable as a default first-step tool for cloud agents operating across unfamiliar repositories.
+
+- [ ] **Phase 9.1: Confidence-Aware Workflow Documentation**
+  - [ ] Document a standard two-step workflow: `code-intel` candidate discovery followed by narrow literal verification for heuristic cases.
+  - [ ] Add confidence interpretation guidance to help agents decide when direct action is safe.
+  - [ ] Publish query cookbook examples for Python, Dart, and mixed documentation-heavy repositories.
+- [ ] **Phase 9.2: Path Scoping & Workflow Ergonomics**
+  - [ ] Make include/exclude scoping more discoverable in user-facing docs and examples.
+  - [ ] Add examples that bias search to implementation directories before broad repository exploration.
+  - [ ] Highlight best-practice workflows for code changes, impact analysis, and architectural reconnaissance.
+- [ ] **Phase 9.3: Cross-Project Value Packaging**
+  - [ ] Identify which improvements most reduce agent uncertainty across non-trivial repositories.
+  - [ ] Document reusable patterns for teams adopting `code-intel` in other codebases.
+  - [ ] Tie documentation updates to benchmark-backed claims so positioning remains evidence-based.
