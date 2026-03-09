@@ -1,6 +1,10 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from src.tools.search import search_code_impl
+from src.tools.search import (
+    _classify_query_intent,
+    _classify_result_type,
+    search_code_impl,
+)
 from src.context import AppContext
 
 from src.utils import normalize_path
@@ -110,3 +114,55 @@ async def test_search_code_exception(mock_ctx):
     
     # Assert
     assert "Search failed: Ollama down" in result
+
+
+def test_classify_query_intent_framework_query():
+    assert _classify_query_intent("FastAPI router Depends middleware") == "framework"
+
+
+def test_classify_result_type_report():
+    assert _classify_result_type("docs/reports/security/report.md") == "report"
+
+
+@pytest.mark.asyncio
+async def test_search_code_source_ranked_above_docs_for_implementation_query(mock_ctx):
+    mock_ctx.ollama.get_embedding.return_value = [0.1] * 1536
+    mock_ctx.vector_store.search.return_value = [
+        {
+            "id": "doc1",
+            "filename": "docs/architecture/auth.md",
+            "start_line": 1,
+            "end_line": 5,
+            "content": "Authentication architecture overview",
+            "symbol_name": None,
+            "complexity": 0,
+        },
+        {
+            "id": "src1",
+            "filename": "src/auth_service.py",
+            "start_line": 10,
+            "end_line": 20,
+            "content": "class AuthService: pass",
+            "symbol_name": "AuthService",
+            "complexity": 2,
+        },
+    ]
+    mock_ctx.vector_store.find_chunks_containing_text.return_value = []
+
+    result = await search_code_impl("authentication service implementation", mock_ctx, limit=2)
+
+    assert result.index("File: src/auth_service.py") < result.index("File: docs/architecture/auth.md")
+    assert "Result Type: source" in result
+    assert "Query Intent: implementation" in result
+
+
+@pytest.mark.asyncio
+async def test_search_code_limit_is_clamped(mock_ctx):
+    mock_ctx.ollama.get_embedding.return_value = [0.1] * 1536
+    mock_ctx.vector_store.search.return_value = []
+    mock_ctx.vector_store.find_chunks_containing_text.return_value = []
+
+    await search_code_impl("implementation service", mock_ctx, limit=999)
+
+    _, kwargs = mock_ctx.vector_store.search.call_args
+    assert kwargs["limit"] == 150

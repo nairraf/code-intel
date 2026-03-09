@@ -5,15 +5,82 @@ Provides:
     search_code_impl: Hybrid semantic + keyword search over the vector index.
 """
 
-import re
 import logging
+import re
 from pathlib import Path
+from typing import Dict, Iterable, Tuple
 
 from ..context import AppContext
 from ..indexer import _should_process_file
 from ..utils import normalize_path
 
 logger = logging.getLogger("server")
+
+_MAX_SEARCH_LIMIT = 50
+
+
+def _classify_result_type(filename: str) -> str:
+    normalized = filename.replace("\\", "/").lower()
+    path = Path(normalized)
+
+    if "docs/reports/" in normalized:
+        return "report"
+    if normalized.endswith(".md") or normalized.startswith("docs/"):
+        return "docs"
+    if any(part in {"tests", "test"} for part in path.parts):
+        return "test"
+    return "source"
+
+
+def _classify_query_intent(query: str) -> str:
+    lowered = query.lower()
+    documentation_terms = {
+        "docs", "documentation", "report", "readme", "architecture", "design", "security review"
+    }
+    framework_terms = {
+        "depends", "middleware", "router", "provider", "riverpod", "fastapi", "decorator"
+    }
+    implementation_terms = {
+        "function", "class", "implementation", "endpoint", "service", "method", "provider"
+    }
+
+    if any(term in lowered for term in documentation_terms):
+        return "documentation"
+    if any(term in lowered for term in framework_terms):
+        return "framework"
+    if any(term in lowered for term in implementation_terms):
+        return "implementation"
+    return "general"
+
+
+def _result_bias_score(result: Dict, query_intent: str) -> Tuple[int, int, int, int]:
+    result_type = _classify_result_type(result.get("filename", ""))
+    type_scores = {
+        "implementation": {"source": 4, "test": 3, "docs": 1, "report": 0},
+        "framework": {"source": 4, "test": 3, "docs": 1, "report": 0},
+        "general": {"source": 3, "test": 2, "docs": 1, "report": 0},
+        "documentation": {"docs": 4, "report": 3, "source": 2, "test": 1},
+    }
+    bias = type_scores.get(query_intent, type_scores["general"])
+    return (
+        bias.get(result_type, 0),
+        1 if bool(result.get("symbol_name")) else 0,
+        int(result.get("complexity", 0) or 0),
+        -int(result.get("start_line", 0) or 0),
+    )
+
+
+def _dedupe_results(results: Iterable[Dict]) -> list[Dict]:
+    deduped = []
+    seen_ids = set()
+    for result in results:
+        result_id = result.get("id")
+        if result_id and result_id in seen_ids:
+            continue
+        if result_id:
+            seen_ids.add(result_id)
+        deduped.append(result)
+    return deduped
 
 
 async def search_code_impl(
@@ -27,9 +94,11 @@ async def search_code_impl(
     """Perform a semantic search and return a formatted results string."""
     try:
         project_root_str = normalize_path(root_path)
+        limit = max(1, min(limit, _MAX_SEARCH_LIMIT))
+        query_intent = _classify_query_intent(query)
 
         # Fetch more candidates when filtering is active so we still return `limit` results.
-        fetch_limit = limit * 5 if (include or exclude) else limit
+        fetch_limit = limit * 5 if (include or exclude) else limit * 3
 
         query_vec = await ctx.ollama.get_embedding(query)
         results = ctx.vector_store.search(project_root_str, query_vec, limit=fetch_limit)
@@ -50,6 +119,9 @@ async def search_code_impl(
                         results.append(tr)
                         seen_ids.add(tr_id)
 
+        results = _dedupe_results(results)
+        results.sort(key=lambda r: _result_bias_score(r, query_intent), reverse=True)
+
         if not results:
             return f"No matching code found in project: {project_root_str}"
 
@@ -67,6 +139,8 @@ async def search_code_impl(
         output = [f"Results for project: {project_root_str}\n"]
         for r in filtered_results:
             meta = []
+            meta.append(f"Result Type: {_classify_result_type(r.get('filename', ''))}")
+            meta.append(f"Query Intent: {query_intent}")
             if r.get('author'):
                 meta.append(f"Author: {r['author']}")
             if r.get('last_modified'):

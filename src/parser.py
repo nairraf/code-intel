@@ -540,6 +540,13 @@ class CodeParser:
                 if node.parent:
                     if node.parent.type == "new_expression" or node.parent.type == "constructor_name":
                         context = "instantiation"
+                    elif lang == "dart":
+                        parent_types = {node.parent.type}
+                        grandparent = node.parent.parent
+                        if grandparent:
+                            parent_types.add(grandparent.type)
+                        if "argument_part" in parent_types or "arguments" in parent_types:
+                            context = "instantiation"
                     elif lang == "python" and node.parent.type == "argument_list":
                         call_node = node.parent.parent
                         if call_node and call_node.type == "call":

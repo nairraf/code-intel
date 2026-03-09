@@ -9,6 +9,7 @@ from src.parser import CodeParser
 from src.knowledge_graph import KnowledgeGraph
 from src.storage import VectorStore
 from src.linker import SymbolLinker
+from src.tools.references import find_references_impl
 
 @pytest.fixture
 def test_env(tmp_path):
@@ -92,3 +93,55 @@ def get_users(db = Depends(verify_firebase_token)):
     # The crucial part: match_type should be explicit_import, not name_match
     assert meta.get("match_type") == "explicit_import"
     assert meta.get("context") == "dependency_injection"
+
+
+@pytest.mark.asyncio
+async def test_find_references_reports_dependency_injection_metadata(test_env):
+    env = test_env
+    project_root = env["root"] / "project"
+    project_root.mkdir()
+
+    middleware_dir = project_root / "middleware"
+    middleware_dir.mkdir()
+    (middleware_dir / "__init__.py").touch()
+    auth_file = middleware_dir / "firebase_auth.py"
+    auth_file.write_text(
+        """
+def verify_firebase_token():
+    pass
+""",
+        encoding="utf-8",
+    )
+
+    api_dir = project_root / "api"
+    api_dir.mkdir()
+    (api_dir / "__init__.py").touch()
+    router_file = api_dir / "router.py"
+    router_file.write_text(
+        """
+from fastapi import Depends
+from middleware.firebase_auth import verify_firebase_token
+
+def get_users(user = Depends(verify_firebase_token)):
+    pass
+""",
+        encoding="utf-8",
+    )
+
+    chunks = env["parser"].parse_file(str(auth_file), str(project_root)) + env["parser"].parse_file(
+        str(router_file), str(project_root)
+    )
+    vectors = [[0.0] * env["vs"].embedding_dims for _ in chunks]
+    env["vs"].upsert_chunks(str(project_root), chunks, vectors)
+
+    for chunk in chunks:
+        env["linker"].link_chunk_usages(str(project_root), chunk)
+
+    class DummyCtx:
+        vector_store = env["vs"]
+        knowledge_graph = env["kg"]
+
+    result = await find_references_impl("verify_firebase_token", str(project_root), DummyCtx())
+
+    assert "High Confidence: explicit_import" in result
+    assert "Reference Kind: dependency_injection" in result

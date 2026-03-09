@@ -15,6 +15,24 @@ from .definition import _get_file_priority, _rank_chunk_key
 logger = logging.getLogger("server")
 
 
+def _normalize_reference_confidence(match_type: str, context: str) -> str:
+    if match_type == "explicit_import":
+        return "High"
+    if context in {"dependency_injection", "decorator", "instantiation"}:
+        return "Medium"
+    return "Low"
+
+
+def _reference_kind(context: str) -> str:
+    mapping = {
+        "dependency_injection": "dependency_injection",
+        "decorator": "decorator",
+        "instantiation": "instantiation",
+        "call": "call",
+    }
+    return mapping.get(context, context or "unknown")
+
+
 async def find_references_impl(
     symbol_name: str,
     root_path: str,
@@ -55,14 +73,17 @@ async def find_references_impl(
                 source_chunk = ctx.vector_store.get_chunk_by_id(project_root_str, source_id)
                 if source_chunk:
                     match_type = meta.get("match_type", "unknown")
-                    confidence = "High" if match_type == "explicit_import" else "Low"
+                    context = meta.get("context", "N/A")
+                    confidence = _normalize_reference_confidence(match_type, context)
+                    reference_kind = _reference_kind(context)
                     all_refs.append({
                         "priority": _get_file_priority(source_chunk["filename"]),
                         "text": (
                             f"Referenced in {source_chunk['filename']} "
                             f"at line {meta.get('line', '??')} "
                             f"({confidence} Confidence: {match_type})\n"
-                            f"Context: {meta.get('context', 'N/A')}"
+                            f"Reference Kind: {reference_kind}\n"
+                            f"Context: {context}"
                         ),
                     })
 

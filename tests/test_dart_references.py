@@ -10,6 +10,7 @@ from src.parser import CodeParser
 from src.knowledge_graph import KnowledgeGraph
 from src.storage import VectorStore
 from src.linker import SymbolLinker
+from src.tools.references import find_references_impl
 
 @pytest.fixture
 def test_env(tmp_path):
@@ -93,3 +94,50 @@ class AuthGate extends StatelessWidget {
     source_id, target_id, t_type, meta = edges[0]
     source_chunk = env["vs"].get_chunk_by_id(str(project_root), source_id)
     assert Path(source_chunk["filename"]).resolve() == usage_file.resolve()
+
+
+@pytest.mark.asyncio
+async def test_find_references_reports_instantiation_kind_for_dart(test_env):
+    env = test_env
+    project_root = env["root"] / "project"
+    project_root.mkdir()
+
+    widget_file = project_root / "login_screen.dart"
+    widget_file.write_text(
+        """
+class LoginScreen extends StatelessWidget {
+  const LoginScreen({Key? key}) : super(key: key);
+}
+""",
+        encoding="utf-8",
+    )
+
+    usage_file = project_root / "auth_gate.dart"
+    usage_file.write_text(
+        """
+import 'login_screen.dart';
+
+Widget buildGate() {
+  return LoginScreen();
+}
+""",
+        encoding="utf-8",
+    )
+
+    chunks = env["parser"].parse_file(str(widget_file), str(project_root)) + env["parser"].parse_file(
+        str(usage_file), str(project_root)
+    )
+    vectors = [[0.0] * env["vs"].embedding_dims for _ in chunks]
+    env["vs"].upsert_chunks(str(project_root), chunks, vectors)
+
+    for chunk in chunks:
+        env["linker"].link_chunk_usages(str(project_root), chunk)
+
+    class DummyCtx:
+        vector_store = env["vs"]
+        knowledge_graph = env["kg"]
+
+    result = await find_references_impl("LoginScreen", str(project_root), DummyCtx())
+
+    assert "High Confidence: explicit_import" in result
+    assert "Referenced in" in result
