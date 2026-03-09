@@ -1,69 +1,118 @@
 # Project Progress
 
-## Current Focus: Milestone 7 Cleanup & Validation Hardening Before Milestone 8
+## Current Focus
 
-### Completed Tasks
+- **Primary:** Complete the [`Milestone 7`](docs/PROJECT_PLAN.md) cleanup gate before starting [`Milestone 8`](docs/PROJECT_PLAN.md).
+- **Validation Baseline:** Latest full-suite result is `120` passing tests at `83%` total coverage.
 
-- [x] Project Structure Initialization.
-- [x] Tree-sitter language pack integration.
-- [x] Vector store (LanceDB) implementation.
-- [x] MCP server core (fastmcp).
-- [x] Fix Environment Sync Issue (Bug: TypeError in lancedb metadata).
-- [x] High-Fidelity Metadata: Complexity, Signatures, Dependencies.
-- [x] Git Integration: Author and Last Modified metadata fix.
-- [x] Enhanced `get_stats`: Language breakdowns and complexity analysis.
-- [x] "Deep Insights" Stats: Dependency Hubs, Test Gaps, and Project Pulse (Active Branch/Stale Files).
-- [x] Stability: Fixed Windows `get_stats` hang (Synchronous DB + Asyncio Subprocesses).
-- [x] Search Visibility: Author, Date, Dependencies exposed in search results.
-- [x] Optimization of embedding latency via local Ollama caching (2.8x - 150x speedup).
-- [x] Performance benchmarking for large repositories.
-- [x] Log cleanup and .gitignore updates.
-- [x] Documentation refinement (Milestone 2).
-- [x] **Milestone 3: Public API & Integration** (`find_definition`, `find_references`).
-- [x] **Milestone 3: Cross-File Linking Engine** (Import Resolution + Knowledge Graph).
-- [x] **Security Hardening: Remediation of Audit Findings** (SQLi, Pickle, Path Traversal).
-- [x] **Quality Audit**: Performed comprehensive code quality review (12 refactoring opportunities identified).
-- [x] **Code Quality (Wave 1)**: Remediated prioritized technical debt in configuration, storage, and server logic, improving maintainability.
-- [x] **Code Quality (Wave 2)**: Decomposed monolithic `server.py` into `src/tools/` sub-modules, `src/indexer.py`, and `src/context.py` (AppContext DI). Removed all "God" terminology. 98 tests passing at **83% coverage**.
-- [2026-03-04] **Wave 3: Core Refactor**: Extracted logic from `server.py` into specialized tools. Implemented Scoping Strategy pattern and Parse Caching for 50%+ speedup.
-- [x] **Wave 4: Production-Grade Scaling**: Implemented LanceDB table handle caching and SQLite transaction batching for KnowledgeGraph writes. Standardized path normalization and fixed a critical concurrency race condition for robust Windows support.
-- [x] **Wave 5: Secondary Remediation**: Normalizing test coverage across extracted sub-modules (Search @ 80%+) and securing the CI pipeline with automated secret scanning (Gitleaks).
-- [x] **Milestone 4: Deployment & DX Enhancements**: Added MIT License, GitHub Release automation, and Community Health standards (Conduct, Contributing, Security).
-- [x] **Milestone 7: Retrieval Precision & Agent Trust (Wave 1)**: Implemented source-first retrieval bias, query-intent/result-type metadata, and clearer reference confidence/kind output for agent workflows. Added regression coverage and verified no suite regressions; latest full-suite baseline is **120 passing tests at 83% total coverage**.
+## Milestone Status Overview
 
-### In Progress
+### Milestone 1: Core AST Indexing
+- **Status:** Completed
+- **Summary:** Tree-sitter integration, semantic chunking, and baseline multi-language indexing are complete.
 
-- [x] **Phase 3.4.5: Incremental Indexing Excellence** (File Hashing + Skip Logic).
-- [x] **Phase 3.4.6: Global Symbol Excellence** (Variable/Constant resolution).
-- [x] **Phase 3.5: Domain-Specific Intelligence** (Firestore Rules, Mermaid).
-- [x] **Scope Tuning:** Implemented `include` and `exclude` glob patterns for noise reduction.
-- [x] **Quality Upgrade**: Migrated to `jina-embeddings-v2-base-code` for superior search accuracy.
-- [x] **Windows Stability**: Fixed FastMCP busy-loop CPU spike (pinned `fastmcp==2.13.3`).
-- [x] **Codebase Cleanup**: Removed diagnostic scripts and standardized environment isolation.
+### Milestone 2: High-Fidelity Metadata & Stability
+- **Status:** Completed
+- **Summary:** Complexity scoring, dependency extraction, git metadata, project pulse insights, isolation, and search metadata exposure are complete.
 
-- [x] **Milestone 6: Agent Observability** (Index Metadata, Git activity, Rule 200/50 checks). Detailed plan in [architecture/API_CONTRACT-stats_enhancements.md](architecture/API_CONTRACT-stats_enhancements.md).
+### Milestone 3: Advanced Intelligence (Cross-File & Graph)
+- **Status:** Mostly completed, with remaining Phase 3.6 backlog
+- **Completed:**
+  - Phase 3.1 import resolution
+  - Phase 3.2 usage/reference analysis
+  - Phase 3.3 knowledge-graph persistence
+  - Phase 3.4 trace tooling (`find_definition`, `find_references`)
+  - Phase 3.4.6 global symbol excellence
+  - Phase 3.5 domain-specific intelligence
+- **Remaining:**
+  - Phase 3.6 advanced linking & discovery
+  - broader LLM provider integrations
+  - real-time indexing on file change
 
-### Upcoming
+### Milestone 4: Deployment & DX
+- **Status:** Mostly completed
+- **Completed:**
+  - verification on fresh install
+  - scope tuning via `include` / `exclude`
+  - Windows/Jina infrastructure alignment
+  - security hardening
+  - professional standards / community files
+  - release automation
+- **Remaining:**
+  - one-click installers/packages
+  - comprehensive CLI dashboard
+  - structural impact analysis
+  - deeper DI framework support
 
-- [ ] Advanced linking & discovery (Phase 3.6).
-- [ ] Structural Impact Analysis (Blast Radius for Refactoring).
-- [ ] Deep AST Support for DI paradigms (FastAPI Depends / Riverpod).
-- [ ] **Milestone 7: Retrieval Precision & Agent Trust** (Remaining work: optional source-biased mode, fuller edge-kind classification, scoped guidance examples).
-- [ ] **Milestone 7 Cleanup Gate Before Milestone 8**: tighten heuristic confidence handling, add docs-intent and heuristic-confidence regression tests, align validation artifacts to the 120-test/83%-coverage baseline, soften source-first wording from guarantee to bias, and review current warning cleanup priorities.
-- [ ] **Milestone 8: Benchmarking & Decision Support** (Repeatable evaluation suite, agent-centric scoring, milestone exit criteria).
-- [ ] **Milestone 9: Agent Workflow Enablement** (Confidence-aware docs, path-scoped usage, cross-project adoption guidance).
+### Milestone 5: Code Quality & Refactoring
+- **Status:** In progress
+- **Completed:**
+  - Wave 1 quick wins
+  - Wave 2 structural decomposition
+  - Wave 3 performance/core refactor
+  - Wave 4 production-grade scaling
+  - Wave 5 secondary remediation
+- **Remaining:**
+  - Wave 6 enhanced agent observability follow-through in code/documentation alignment
 
-### Planning Notes
+### Milestone 6: Agent Navigation & Health
+- **Status:** Completed
+- **Completed:**
+  - index intelligence metadata
+  - git activity insight in `get_stats`
+  - architectural guardian / 200-50 rule checks
 
-- [x] Reviewed external benchmark feedback in [`docs/reports/code_review/code-intel-evaluation-report.md`](docs/reports/code_review/code-intel-evaluation-report.md).
-- [x] Added a prioritized roadmap to [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md) focused on retrieval precision, benchmark repeatability, and agent workflow trust.
-- [x] Re-aligned architecture notes to the current Jina embedding model in [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md).
-- [x] Completed the first Milestone 7 implementation slice and recorded the reasoning review in [`docs/reports/security/SECURITY_REPORT-20260309.md`](docs/reports/security/SECURITY_REPORT-20260309.md).
-- [ ] Next planning checkpoint: complete the Milestone 7 cleanup gate, then begin Milestone 8 with corrected confidence handling and refreshed validation evidence.
+### Milestone 7: Retrieval Precision & Agent Trust
+- **Status:** Partially completed; cleanup gate remains before Milestone 8
+- **Completed this session:**
+  - source-first retrieval bias for implementation/framework-oriented queries
+  - query-intent classification
+  - result-type metadata (`source`, `test`, `docs`, `report`)
+  - richer reference output with confidence labels and reference-kind reporting
+  - improved Python `Depends` context detection
+  - regression coverage for search ranking and reference output
+  - MCP re-index and live tool validation after restart
+- **Still remaining:**
+  - optional source-biased retrieval mode
+  - fuller graph edge-kind classification
+  - scoped search guidance examples
 
-### Verification Status
+#### Milestone 7 Cleanup Gate Before Milestone 8
+- [ ] Tighten heuristic confidence normalization so `name_match` stays Low unless resolution quality is stronger.
+- [ ] Add regression coverage for documentation-intent ranking behavior.
+- [ ] Add regression coverage for framework-shaped heuristic `name_match` confidence behavior.
+- [ ] Align validation artifacts to the current measured baseline (`120` tests, `83%` coverage).
+- [ ] Clarify user-facing wording so source-first is described as a ranking bias rather than a retrieval guarantee.
+- [ ] Triage current warnings (`table_names()` deprecations and async warning paths) before Milestone 8 begins.
 
-- [x] **Full Rebuild & Tool Test:** Verified `search_code`, `get_stats`, `find_definition`, `find_references` on fresh index. All passed.
-- [x] **Hardened Testing:** Implemented real DB tests for `VectorStore` and full integration tests. Coverage gaps reduced.
-- [x] **80% Coverage Target:** Successfully reached 80% total project coverage across all core modules.
-- [x] **Bug Fix:** Resolved race condition in symbol linking via two-pass indexing.
+### Milestone 8: Benchmarking & Decision Support
+- **Status:** Not started
+- **Blocked by:** completion of the Milestone 7 cleanup gate.
+
+### Milestone 9: Agent Workflow Enablement
+- **Status:** Not started
+- **Dependency:** benchmark and confidence semantics should stabilize first.
+
+## Session Highlights
+
+- Added and shipped the first implementation slice for [`Milestone 7`](docs/PROJECT_PLAN.md).
+- Added planning/contract updates for retrieval precision work.
+- Added a security reasoning report in [`docs/reports/security/SECURITY_REPORT-20260309.md`](docs/reports/security/SECURITY_REPORT-20260309.md).
+- Validated the MCP server after restart with:
+  - full rebuild
+  - `search_code`
+  - `find_definition`
+  - `find_references`
+  - `get_stats`
+
+## Verification Status
+
+- [x] Full test suite passing (`120` tests).
+- [x] Coverage remains above the project gate at `83%` total coverage.
+- [x] MCP live validation completed after a full re-index.
+- [x] Milestone 7 implementation is working in the running server.
+- [ ] Milestone 7 cleanup gate completed.
+
+## Next Decision Point
+
+Do not begin [`Milestone 8`](docs/PROJECT_PLAN.md) until the [`Milestone 7`](docs/PROJECT_PLAN.md) cleanup gate is complete and the confidence/validation/documentation issues identified in review are closed.
