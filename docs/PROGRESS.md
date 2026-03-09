@@ -1,6 +1,6 @@
 # Project Progress
 
-## Current Focus: Roadmap Prioritization for Retrieval Precision, Agent Trust, and Benchmark-Guided Improvements
+## Current Focus: Milestone 7 Cleanup & Validation Hardening Before Milestone 8
 
 ### Completed Tasks
 
@@ -29,7 +29,7 @@
 - [x] **Wave 4: Production-Grade Scaling**: Implemented LanceDB table handle caching and SQLite transaction batching for KnowledgeGraph writes. Standardized path normalization and fixed a critical concurrency race condition for robust Windows support.
 - [x] **Wave 5: Secondary Remediation**: Normalizing test coverage across extracted sub-modules (Search @ 80%+) and securing the CI pipeline with automated secret scanning (Gitleaks).
 - [x] **Milestone 4: Deployment & DX Enhancements**: Added MIT License, GitHub Release automation, and Community Health standards (Conduct, Contributing, Security).
-- [x] **Milestone 7: Retrieval Precision & Agent Trust (Wave 1)**: Implemented source-first retrieval bias, query-intent/result-type metadata, and clearer reference confidence/kind output for agent workflows. Added regression coverage and verified no suite regressions at **85% total coverage**.
+- [x] **Milestone 7: Retrieval Precision & Agent Trust (Wave 1)**: Implemented source-first retrieval bias, query-intent/result-type metadata, and clearer reference confidence/kind output for agent workflows. Added regression coverage and verified no suite regressions; latest full-suite baseline is **120 passing tests at 83% total coverage**.
 
 ### In Progress
 
@@ -49,6 +49,7 @@
 - [ ] Structural Impact Analysis (Blast Radius for Refactoring).
 - [ ] Deep AST Support for DI paradigms (FastAPI Depends / Riverpod).
 - [ ] **Milestone 7: Retrieval Precision & Agent Trust** (Remaining work: optional source-biased mode, fuller edge-kind classification, scoped guidance examples).
+- [ ] **Milestone 7 Cleanup Gate Before Milestone 8**: tighten heuristic confidence handling, add docs-intent and heuristic-confidence regression tests, align validation artifacts to the 120-test/83%-coverage baseline, soften source-first wording from guarantee to bias, and review current warning cleanup priorities.
 - [ ] **Milestone 8: Benchmarking & Decision Support** (Repeatable evaluation suite, agent-centric scoring, milestone exit criteria).
 - [ ] **Milestone 9: Agent Workflow Enablement** (Confidence-aware docs, path-scoped usage, cross-project adoption guidance).
 
@@ -58,7 +59,7 @@
 - [x] Added a prioritized roadmap to [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md) focused on retrieval precision, benchmark repeatability, and agent workflow trust.
 - [x] Re-aligned architecture notes to the current Jina embedding model in [`docs/PROJECT_PLAN.md`](docs/PROJECT_PLAN.md).
 - [x] Completed the first Milestone 7 implementation slice and recorded the reasoning review in [`docs/reports/security/SECURITY_REPORT-20260309.md`](docs/reports/security/SECURITY_REPORT-20260309.md).
-- [ ] Next planning checkpoint: decide whether to continue deeper framework-specific edge classification or shift focus back to other project work.
+- [ ] Next planning checkpoint: complete the Milestone 7 cleanup gate, then begin Milestone 8 with corrected confidence handling and refreshed validation evidence.
 
 ### Verification Status
 

@@ -112,6 +112,15 @@ Goal: Increase practical value for AI agents by reducing false-positive discover
   - [ ] Recommend scoped search patterns when the repository contains high-volume documentation noise.
   - [x] Expose guidance that helps agents choose between `search_code`, `find_definition`, and `find_references` based on intent.
 
+#### Milestone 7 Exit Cleanup Before Milestone 8
+
+- [ ] Tighten confidence normalization so heuristic `name_match` results cannot be promoted above Low confidence solely because the usage context appears framework-specific.
+- [ ] Add a regression test proving documentation-intent queries can still prefer docs/report content when appropriate.
+- [ ] Add a regression test proving framework-shaped heuristic `name_match` results remain Low confidence.
+- [ ] Update validation artifacts to reflect the current full-suite measurement baseline (`120` tests passed, `83%` total coverage) unless a narrower scoped coverage figure is explicitly called out.
+- [ ] Update retrieval wording in user-facing docs to describe source-first behavior as a ranking bias, not a guaranteed source-only retrieval mode.
+- [ ] Triage and prioritize post-validation cleanup for deprecated `table_names()` usage and current async warning paths before starting Milestone 8.
+
 ### Milestone 8: Benchmarking & Decision Support
 
 Goal: Turn external evaluation feedback into a repeatable quality gate that helps decide when tool investment creates enough cross-project value.
