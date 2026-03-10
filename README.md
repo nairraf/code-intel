@@ -102,10 +102,14 @@ Go beyond simple keyword matching. Search for concepts like "how do we handle us
 
 The latest retrieval pipeline adds **source-first ranking** for implementation-oriented queries, helping code results outrank documentation noise in doc-heavy repositories. Search responses now also expose **Result Type** and **Query Intent** metadata so agents can reason about whether a hit is source, test, docs, or report content.
 
+The March 2026 evaluation retest now grades all core tools as passing, including semantic search and Python reference tracing after the latest ranking and indexing improvements.
+
 ### Cross-File Architecture Graph
 A persistent knowledge graph tracks imports and function calls across your entire project. This enables precise "Jump to Definition" and "Find References" that work reliably across many files, including advanced structural tracking for Dart widget instantiations and Python dependency injection (`Depends()`).
 
 Reference tracing output now includes normalized confidence labels and explicit **Reference Kind** metadata, making it easier for agents to distinguish high-confidence structural matches from lower-confidence heuristic matches.
+
+Recent Python improvements also index import references and common override-registration patterns, improving test-file recall and cross-file navigation in service-oriented backends.
 
 ### Security & Quality Hardened
 Independently audited and remediated against OWASP Top 10 vulnerabilities. Includes robust sanitization for vector filters, safe JSON-based serialization, and strict path containment.
@@ -157,8 +161,14 @@ While we support 80+ languages via Tree-sitter, we provide optimized resolution 
 * **Robust Windows Support**: Fixed concurrency race conditions and standardized path normalization.
 * **Scope Tuning**: Added `include`/`exclude` glob patterns for specialized indexing.
 * **Retrieval Precision**: Added source-first ranking, query-intent classification, and result-type metadata for better agent search behavior.
+* **Search Ranking Fix**: Prevented generated artifacts such as `GeneratedPluginRegistrant.java` from dominating semantic search results.
 * **Reference Clarity**: Added richer confidence and reference-kind reporting in `find_references` output.
+* **Python Recall Improvements**: Added Python import and override-registration indexing for better cross-file reference coverage.
 * **Security Hardening**: Integrated automated secret scanning (Gitleaks) into CI.
+
+## 📍 Current Status
+
+The latest full regression run passed with `126` tests, and the latest external evaluation now grades all major code-intel modules as passing. The immediate next work is Milestone 7 cleanup: confidence normalization hardening, documentation-intent regression coverage, wording cleanup, and warning triage before benchmark packaging begins.
 
 ---
 

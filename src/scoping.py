@@ -29,6 +29,9 @@ class PythonScopingStrategy:
             if node.parent and node.parent.type == "expression_statement":
                 if node.parent.parent and node.parent.parent.type == "module":
                     return True
+        elif node.type in ("import_statement", "import_from_statement"):
+            if node.parent and node.parent.type == "module":
+                return True
         elif node.type in ("expression_statement", "call"):
             curr = node
             while curr.parent:

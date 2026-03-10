@@ -163,7 +163,7 @@ class CodeParser:
     def _chunk_node(self, node: Node, full_content: str, filepath: str, lang_name: str) -> List[CodeChunk]:
         """Walks the AST and extracts meaningful chunks."""
         relevant_types = {
-            "python": {"class_definition", "function_definition", "assignment", "expression_statement", "call"},
+            "python": {"class_definition", "function_definition", "assignment", "expression_statement", "call", "import_statement", "import_from_statement"},
             "javascript": {"class_declaration", "function_declaration", "method_definition", "arrow_function"},
             "typescript": {"class_declaration", "function_declaration", "method_definition", "interface_declaration", "enum_declaration"},
             "tsx": {"class_declaration", "function_declaration", "method_definition", "interface_declaration"},
@@ -186,7 +186,7 @@ class CodeParser:
             
             # If it's one of the globally-scoped node types but not at global scope, recurse and abort
             global_types = {
-                "python": {"assignment", "expression_statement", "call"},
+                "python": {"assignment", "expression_statement", "call", "import_statement", "import_from_statement"},
                 "dart": {"static_final_declaration_list", "initialized_identifier_list", "declaration", "expression_statement", "call"}
             }
             if not is_global and lang in global_types and node.type in global_types[lang]:
@@ -386,26 +386,11 @@ class CodeParser:
                                 name_node = child.child_by_field_name("name")
                                 if name_node: deps.add(name_node.text.decode("utf-8", errors="replace"))
                     elif tag == "import_from":
-                        module_name = node.child_by_field_name("module_name")
-                        mod_str = ""
-                        if module_name:
-                            mod_str = module_name.text.decode("utf-8", errors="replace")
-                            deps.add(mod_str)
-                        else:
-                            # It could be a relative import like `from . import foo`
-                            # In tree-sitter python, the node might have no module_name child
-                            # but children will be `.`, `foo`
-                            pass # We can improve this if needed, but for now stick to named modules
-
+                        mod_str = self._extract_python_import_from_module(node)
                         if mod_str:
-                            for child in node.children:
-                                if child.type == "dotted_name" and child != module_name:
-                                    sym_str = child.text.decode("utf-8", errors="replace")
-                                    deps.add(f"{mod_str}::{sym_str}")
-                                elif child.type == "aliased_import":
-                                    name_node = child.child_by_field_name("name")
-                                    if name_node:
-                                        deps.add(f"{mod_str}::{name_node.text.decode('utf-8', errors='replace')}")
+                            deps.add(mod_str)
+                            for imported_symbol in self._extract_python_imported_symbols(node):
+                                deps.add(f"{mod_str}::{imported_symbol}")
                 
         elif lang == "dart":
             query = Query(language, "(string_literal) @path")
@@ -487,6 +472,9 @@ class CodeParser:
         language = self.languages.get(lang)
         if not language:
             return []
+
+        if lang == "python":
+            usages.extend(self._extract_python_structural_usages(root_node))
 
         # Queries for usages
         queries = {
@@ -579,8 +567,81 @@ class CodeParser:
                 ))
         except Exception:
             pass
-            
+
+        return self._dedupe_usages(usages)
+
+    def _extract_python_structural_usages(self, root_node: Node) -> List[SymbolUsage]:
+        usages: List[SymbolUsage] = []
+
+        if root_node.type == "import_from_statement":
+            line = root_node.start_point[0] + 1
+            context = "import"
+            for imported_symbol in self._extract_python_imported_symbols(root_node):
+                column = self._find_usage_column(root_node, imported_symbol)
+                usages.append(SymbolUsage(
+                    name=imported_symbol,
+                    line=line,
+                    character=column,
+                    context=context,
+                ))
+
+        if root_node.type == "assignment":
+            assignment_text = root_node.text.decode("utf-8", errors="replace")
+            for match in re.finditer(r"dependency_overrides\[(?P<name>[A-Za-z_][A-Za-z0-9_]*)\]", assignment_text):
+                usages.append(SymbolUsage(
+                    name=match.group("name"),
+                    line=root_node.start_point[0] + 1,
+                    character=root_node.start_point[1] + match.start("name"),
+                    context="override_registration",
+                ))
+
         return usages
+
+    def _extract_python_import_from_module(self, node: Node) -> str:
+        text = node.text.decode("utf-8", errors="replace").strip()
+        match = re.match(r"from\s+(?P<module>[^\s]+)\s+import\s+", text)
+        if not match:
+            return ""
+        return match.group("module")
+
+    def _extract_python_imported_symbols(self, node: Node) -> List[str]:
+        text = node.text.decode("utf-8", errors="replace").strip()
+        if " import " not in text:
+            return []
+
+        imported_part = text.split(" import ", 1)[1].strip()
+        if imported_part.startswith("(") and imported_part.endswith(")"):
+            imported_part = imported_part[1:-1]
+
+        imported_symbols = []
+        for raw_part in imported_part.split(","):
+            candidate = raw_part.strip()
+            if not candidate or candidate == "*":
+                continue
+            candidate = candidate.split(" as ", 1)[0].strip()
+            if not candidate:
+                continue
+            imported_symbols.append(candidate)
+
+        return imported_symbols
+
+    def _find_usage_column(self, node: Node, symbol_name: str) -> int:
+        text = node.text.decode("utf-8", errors="replace")
+        index = text.find(symbol_name)
+        if index < 0:
+            return node.start_point[1]
+        return node.start_point[1] + index
+
+    def _dedupe_usages(self, usages: List[SymbolUsage]) -> List[SymbolUsage]:
+        deduped: List[SymbolUsage] = []
+        seen = set()
+        for usage in usages:
+            key = (usage.name, usage.line, usage.character, usage.context)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(usage)
+        return deduped
 
     def _extract_mermaid_chunks(self, content: str, filepath: str) -> List[CodeChunk]:
         """Extracts nodes from Mermaid blocks in Markdown as searchable chunks."""

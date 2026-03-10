@@ -64,6 +64,32 @@ def get_users(db = Depends(get_db_session)):
     db_session_usage = next(u for u in users_chunk.usages if u.name == "get_db_session")
     assert db_session_usage.context == "dependency_injection"
 
+
+def test_extract_python_import_statement_usages(parser, tmp_path):
+    code = """
+from middleware.firebase_auth import verify_firebase_token as verify_token
+"""
+    f = tmp_path / "test_imports.py"
+    f.write_text(code, encoding="utf-8")
+
+    chunks = parser.parse_file(str(f))
+    import_chunk = next(c for c in chunks if c.type == "import_from_statement")
+
+    assert any(u.name == "verify_firebase_token" and u.context == "import" for u in import_chunk.usages)
+
+
+def test_extract_python_override_registration_usage(parser, tmp_path):
+    code = """
+app.dependency_overrides[verify_firebase_token] = override_verify_firebase_token
+"""
+    f = tmp_path / "test_override.py"
+    f.write_text(code, encoding="utf-8")
+
+    chunks = parser.parse_file(str(f))
+    assignment_chunk = next(c for c in chunks if c.type == "assignment")
+
+    assert any(u.name == "verify_firebase_token" and u.context == "override_registration" for u in assignment_chunk.usages)
+
 def test_extract_js_usages(parser, tmp_path):
     code = """
 function main() {

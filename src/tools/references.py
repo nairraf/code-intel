@@ -25,9 +25,11 @@ def _normalize_reference_confidence(match_type: str, context: str) -> str:
 
 def _reference_kind(context: str) -> str:
     mapping = {
+        "import": "import",
         "dependency_injection": "dependency_injection",
         "decorator": "decorator",
         "instantiation": "instantiation",
+        "override_registration": "override_registration",
         "call": "call",
     }
     return mapping.get(context, context or "unknown")

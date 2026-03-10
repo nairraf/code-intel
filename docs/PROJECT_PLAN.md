@@ -95,14 +95,19 @@ A lightweight, high-performance MCP server providing semantic code search and AS
 
 Goal: Increase practical value for AI agents by reducing false-positive discovery, improving dynamic-framework navigation, and making result confidence easier to operationalize.
 
+Current status note from the 2026-03-09 external retest: all evaluated tool modules now pass. The remaining work in this milestone is cleanup and quality hardening, not recovery from benchmark regressions.
+
 - [x] **Phase 7.1: Source-First Retrieval Ranking**
   - [x] Add ranking priors so implementation files outrank documentation for code-intent queries.
   - [x] De-prioritize `docs/` and report artifacts unless the query intent is explicitly documentation-oriented.
   - [x] Surface result classification metadata such as `source`, `test`, `docs`, and `report` in search results.
+  - [x] Rebalance reranking so semantic relevance remains primary and raw complexity cannot promote weak matches above strong source candidates.
+  - [x] Add default or strongly documented exclusion patterns for generated/build artifacts such as `**/GeneratedPluginRegistrant.*`, `**/generated/**`, and `**/build/**`.
   - [ ] Add an optional source-biased search mode for agent workflows that need implementation candidates first.
   - [x] Validate improvements against benchmark queries where documentation currently outranks code.
 - [x] **Phase 7.2: Framework-Aware Reference Semantics**
   - [x] Expand Python dependency-injection detection for FastAPI-style `Depends` flows.
+  - [x] Extend Python usage extraction/linking to capture import references and common test override paths so reference recall improves before confidence tuning.
   - [ ] Classify graph relationships by reference kind: import, call, dependency-injection, decorator, and instantiation.
   - [x] Improve confidence labeling in reference results so agents can distinguish exact structural matches from heuristic matches.
   - [x] Add focused regression tests for framework-owned symbols and middleware-style registration paths.
@@ -114,16 +119,21 @@ Goal: Increase practical value for AI agents by reducing false-positive discover
 
 #### Milestone 7 Exit Cleanup Before Milestone 8
 
+- [x] Resolve the semantic search regression verified on 2026-03-09, where generated artifacts can outrank relevant source files for unrelated queries.
+- [x] Add regression coverage proving generated files and metadata-heavy artifacts cannot dominate top search ranks for implementation-intent queries.
+- [x] Improve Python reference recall for imports and test-override cases before treating DI confidence semantics as stable.
 - [ ] Tighten confidence normalization so heuristic `name_match` results cannot be promoted above Low confidence solely because the usage context appears framework-specific.
 - [ ] Add a regression test proving documentation-intent queries can still prefer docs/report content when appropriate.
 - [ ] Add a regression test proving framework-shaped heuristic `name_match` results remain Low confidence.
-- [ ] Update validation artifacts to reflect the current full-suite measurement baseline (`120` tests passed, `83%` total coverage) unless a narrower scoped coverage figure is explicitly called out.
+- [x] Update validation artifacts to reflect the current full-suite measurement baseline (`126` tests passed; latest measured coverage baseline remains `83%`) unless a narrower scoped coverage figure is explicitly called out.
 - [ ] Update retrieval wording in user-facing docs to describe source-first behavior as a ranking bias, not a guaranteed source-only retrieval mode.
 - [ ] Triage and prioritize post-validation cleanup for deprecated `table_names()` usage and current async warning paths before starting Milestone 8.
 
 ### Milestone 8: Benchmarking & Decision Support
 
 Goal: Turn external evaluation feedback into a repeatable quality gate that helps decide when tool investment creates enough cross-project value.
+
+Entry criteria: do not start this milestone until the remaining Milestone 7 cleanup-gate items are closed, otherwise the benchmark suite will formalize behavior that still has known confidence and warning-cleanup debt.
 
 - [ ] **Phase 8.1: Repeatable Retrieval Benchmark Suite**
   - [ ] Create benchmark scenarios for definition lookup, reference recall, semantic precision, and documentation-noise suppression.
@@ -154,3 +164,10 @@ Goal: Make `code-intel` more predictable and more valuable as a default first-st
   - [ ] Identify which improvements most reduce agent uncertainty across non-trivial repositories.
   - [ ] Document reusable patterns for teams adopting `code-intel` in other codebases.
   - [ ] Tie documentation updates to benchmark-backed claims so positioning remains evidence-based.
+
+## Recommended Near-Term Execution Order
+
+1. **Milestone 7 Exit Cleanup:** finish confidence normalization, regression coverage, wording fixes, and warning triage.
+2. **Milestone 8:** convert the now-passing external evaluation into a repeatable benchmark and release-decision gate.
+3. **Milestone 9:** publish confidence-aware workflow guidance after benchmark-backed stability exists.
+4. **Later backlog:** resume Milestone 4 packaging/impact-analysis work, Milestone 3.6 advanced linking, Milestone 5 Wave 6 observability, broader provider integrations, and real-time indexing after retrieval trust is materially improved.

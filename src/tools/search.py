@@ -18,6 +18,19 @@ logger = logging.getLogger("server")
 
 _MAX_SEARCH_LIMIT = 50
 
+_GENERATED_FILENAME_PATTERNS = (
+    "generatedpluginregistrant.",
+    ".g.dart",
+    ".freezed.dart",
+)
+
+_GENERATED_PATH_PARTS = {
+    "build",
+    "generated",
+    ".dart_tool",
+    "ephemeral",
+}
+
 
 def _classify_result_type(filename: str) -> str:
     normalized = filename.replace("\\", "/").lower()
@@ -30,6 +43,16 @@ def _classify_result_type(filename: str) -> str:
     if any(part in {"tests", "test"} for part in path.parts):
         return "test"
     return "source"
+
+
+def _is_generated_artifact(filename: str) -> bool:
+    normalized = filename.replace("\\", "/").lower()
+    path = Path(normalized)
+
+    if any(part in _GENERATED_PATH_PARTS for part in path.parts):
+        return True
+
+    return any(pattern in normalized for pattern in _GENERATED_FILENAME_PATTERNS)
 
 
 def _classify_query_intent(query: str) -> str:
@@ -53,7 +76,17 @@ def _classify_query_intent(query: str) -> str:
     return "general"
 
 
-def _result_bias_score(result: Dict, query_intent: str) -> Tuple[int, int, int, int]:
+def _semantic_relevance_score(result: Dict, semantic_rank: int) -> float:
+    distance = result.get("_distance")
+    if distance is not None:
+        try:
+            return -float(distance)
+        except (TypeError, ValueError):
+            pass
+    return float(-semantic_rank)
+
+
+def _result_bias_score(result: Dict, query_intent: str, semantic_rank: int) -> Tuple[int, float, int, int, int]:
     result_type = _classify_result_type(result.get("filename", ""))
     type_scores = {
         "implementation": {"source": 4, "test": 3, "docs": 1, "report": 0},
@@ -63,9 +96,10 @@ def _result_bias_score(result: Dict, query_intent: str) -> Tuple[int, int, int, 
     }
     bias = type_scores.get(query_intent, type_scores["general"])
     return (
+        0 if _is_generated_artifact(result.get("filename", "")) else 1,
         bias.get(result_type, 0),
+        _semantic_relevance_score(result, semantic_rank),
         1 if bool(result.get("symbol_name")) else 0,
-        int(result.get("complexity", 0) or 0),
         -int(result.get("start_line", 0) or 0),
     )
 
@@ -81,6 +115,22 @@ def _dedupe_results(results: Iterable[Dict]) -> list[Dict]:
             seen_ids.add(result_id)
         deduped.append(result)
     return deduped
+
+
+def _rank_results(results: Iterable[Dict], query_intent: str) -> list[Dict]:
+    ranked_results = list(results)
+    for semantic_rank, result in enumerate(ranked_results):
+        result.setdefault("_semantic_rank", semantic_rank)
+
+    ranked_results.sort(
+        key=lambda result: _result_bias_score(
+            result,
+            query_intent,
+            int(result.get("_semantic_rank", 0) or 0),
+        ),
+        reverse=True,
+    )
+    return ranked_results
 
 
 async def search_code_impl(
@@ -102,6 +152,8 @@ async def search_code_impl(
 
         query_vec = await ctx.ollama.get_embedding(query)
         results = ctx.vector_store.search(project_root_str, query_vec, limit=fetch_limit)
+        for semantic_rank, result in enumerate(results):
+            result.setdefault("_semantic_rank", semantic_rank)
 
         # --- Hybrid recall enhancement ---
         # Supplement semantic results with literal keyword matches for acronyms / long words.
@@ -113,14 +165,15 @@ async def search_code_impl(
                 text_results = ctx.vector_store.find_chunks_containing_text(
                     project_root_str, kw, limit=keyword_limit
                 )
-                for tr in text_results:
+                for keyword_rank, tr in enumerate(text_results, start=len(results)):
+                    tr.setdefault("_semantic_rank", keyword_rank)
                     tr_id = tr.get('id')
                     if tr_id and tr_id not in seen_ids:
                         results.append(tr)
                         seen_ids.add(tr_id)
 
         results = _dedupe_results(results)
-        results.sort(key=lambda r: _result_bias_score(r, query_intent), reverse=True)
+        results = _rank_results(results, query_intent)
 
         if not results:
             return f"No matching code found in project: {project_root_str}"

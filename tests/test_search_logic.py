@@ -1,16 +1,18 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from src.tools.search import (
     _classify_query_intent,
     _classify_result_type,
+    _is_generated_artifact,
+    _rank_results,
     search_code_impl,
 )
 from src.context import AppContext
 
 from src.utils import normalize_path
 
-@pytest.fixture
-def mock_ctx():
+@pytest.fixture(name="mock_ctx")
+def mock_ctx_fixture():
     ctx = MagicMock(spec=AppContext)
     ctx.ollama = AsyncMock()
     ctx.vector_store = MagicMock()
@@ -124,6 +126,35 @@ def test_classify_result_type_report():
     assert _classify_result_type("docs/reports/security/report.md") == "report"
 
 
+def test_is_generated_artifact_detects_generated_plugin_registrant():
+    assert _is_generated_artifact("android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java")
+
+
+def test_rank_results_preserves_semantic_order_over_complexity_for_same_result_type():
+    results = [
+        {
+            "id": "1",
+            "filename": "src/relevant.py",
+            "symbol_name": "relevant_symbol",
+            "complexity": 1,
+            "start_line": 20,
+            "_semantic_rank": 0,
+        },
+        {
+            "id": "2",
+            "filename": "src/noisy.py",
+            "symbol_name": "noisy_symbol",
+            "complexity": 10,
+            "start_line": 10,
+            "_semantic_rank": 1,
+        },
+    ]
+
+    ranked = _rank_results(results, "implementation")
+
+    assert ranked[0]["filename"] == "src/relevant.py"
+
+
 @pytest.mark.asyncio
 async def test_search_code_source_ranked_above_docs_for_implementation_query(mock_ctx):
     mock_ctx.ollama.get_embedding.return_value = [0.1] * 1536
@@ -154,6 +185,38 @@ async def test_search_code_source_ranked_above_docs_for_implementation_query(moc
     assert result.index("File: src/auth_service.py") < result.index("File: docs/architecture/auth.md")
     assert "Result Type: source" in result
     assert "Query Intent: implementation" in result
+
+
+@pytest.mark.asyncio
+async def test_search_code_demotes_generated_artifacts_for_implementation_query(mock_ctx):
+    mock_ctx.ollama.get_embedding.return_value = [0.1] * 1536
+    mock_ctx.vector_store.search.return_value = [
+        {
+            "id": "gen1",
+            "filename": "android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java",
+            "start_line": 1,
+            "end_line": 30,
+            "content": "public final class GeneratedPluginRegistrant {}",
+            "symbol_name": "GeneratedPluginRegistrant",
+            "complexity": 10,
+            "_distance": 0.01,
+        },
+        {
+            "id": "src1",
+            "filename": "src/firebase_auth.py",
+            "start_line": 1,
+            "end_line": 20,
+            "content": "def verify_firebase_token(): pass",
+            "symbol_name": "verify_firebase_token",
+            "complexity": 2,
+            "_distance": 0.02,
+        },
+    ]
+    mock_ctx.vector_store.find_chunks_containing_text.return_value = []
+
+    result = await search_code_impl("JWT Firebase token validation middleware backend", mock_ctx, limit=2)
+
+    assert result.index("File: src/firebase_auth.py") < result.index("File: android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java")
 
 
 @pytest.mark.asyncio
