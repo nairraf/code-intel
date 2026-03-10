@@ -66,26 +66,21 @@ def _get_ctx():
 
 @mcp.tool()
 async def refresh_index(
-    root_path: str = ".",
+    root_path: str,
     force_full_scan: bool = False,
     include: str = None,
     exclude: str = None,
 ) -> str:
     """
-    Scans, parses, and indexes the codebase for semantic search and symbol linking.
+    Scans, parses, and indexes the codebase.
 
-    BEST FOR:
-    - First-time initialization of a project workspace.
-    - Synchronizing the index after a major refactor or git pull.
-    - Rebuilding the 'Knowledge Graph' (edges) to fix broken jump-to-definition links.
-    - Targeting specific directories for re-indexing (via 'include').
+    Best for: Initializing the workspace or syncing after major changes/refactors.
 
     Args:
-        root_path: The absolute path to the project root. Defaults to current directory.
-        force_full_scan: If True, wipes the existing index and performs a total rebuild.
-                         Use this if the index feels stale or corrupted.
-        include: Optional glob pattern to ONLY index matching files (e.g., 'src/api/**').
-        exclude: Optional glob pattern to SKIP matching files (e.g., 'tests/**').
+        root_path: MUST be the absolute path to the active workspace project root (e.g., 'd:/workspace/my-project'). NEVER use '.' or relative paths.
+        force_full_scan: True to wipe and rebuild the index.
+        include: Glob pattern to ONLY index matching files (e.g., 'src/**').
+        exclude: Glob pattern to SKIP matching files (e.g., 'tests/**').
     """
     norm_root = normalize_path(root_path)
     return await refresh_index_impl(
@@ -99,46 +94,36 @@ async def refresh_index(
 @mcp.tool()
 async def search_code(
     query: str,
-    root_path: str = ".",
+    root_path: str,
     limit: int = 10,
     include: str = None,
     exclude: str = None,
 ) -> str:
     """
-    Performs a semantic (vector-based) search over the indexed codebase.
+    Semantic (vector-based) search over the codebase.
 
-    BEST FOR:
-    - Finding code related to a concept (e.g., 'how is authentication handled?').
-    - Locating similar implementations across the codebase.
-    - Navigating unfamiliar projects where specific symbol names aren't known.
-
-    The results will include chunk-level author, modification date, and complexity metadata.
-    Note: for broader architectural project pulse tracking, utilize the `get_stats` tool.
+    Best for: Finding code related to a concept or locating similar implementations.
 
     Args:
         query: Natural language description of what you are looking for.
-        root_path: Project root directory to search within.
-        limit: Number of results to return (max recommended: 20).
-        include: Optional glob pattern to ONLY return matches from specific files (e.g. 'src/**').
-        exclude: Optional glob pattern to HIDE matches from specific files (e.g. 'tests/**').
+        root_path: MUST be the absolute path to the active workspace project root. NEVER use '.' or relative paths.
+        limit: Max results to return (recommended: 10-20).
+        include: Glob filter for files to search within (e.g., 'src/**').
+        exclude: Glob filter for files to ignore.
     """
     norm_root = normalize_path(root_path)
     return await search_code_impl(query, _get_ctx(), norm_root, limit, include, exclude)
 
 
 @mcp.tool()
-async def get_stats(root_path: str = ".") -> str:
+async def get_stats(root_path: str) -> str:
     """
-    Provides a high-level architectural overview and 'Project Pulse' health report.
+    Provides a high-level architectural overview and health report.
 
-    BEST FOR:
-    - Identifying 'High-Risk Symbols' (very high complexity with low test coverage).
-    - Finding 'Dependency Hubs' (central files that might be refactor targets).
-    - Checking the 'Project Pulse' (active branch, stale files).
-    - Quantifying language distribution and technical debt.
+    Best for: Checking project health, finding high-risk symbols, or identifying dependency hubs.
 
     Args:
-        root_path: Project root directory to analyze.
+        root_path: MUST be the absolute path to the active workspace project root. NEVER use '.' or relative paths.
     """
     norm_root = normalize_path(root_path)
     return await get_stats_impl(norm_root, _get_ctx())
@@ -148,26 +133,19 @@ async def get_stats(root_path: str = ".") -> str:
 async def find_definition(
     filename: str,
     line: int,
-    symbol_name: Optional[str] = None,
-    root_path: str = ".",
+    symbol_name: Optional[str],
+    root_path: str,
 ) -> str:
     """
-    Locates the source code definition for a specific symbol.
+    Locates the source code definition for a specific symbol used in a file.
 
-    BEST FOR:
-    - 'Jump to Definition' logic when you encounter an unfamiliar function or class call.
-    - Understanding the exact implementation details of a specific component.
-    - Resolving imports across multiple files.
-
-    Note: For dynamic dependency injection or highly nested python decorators, fallback
-    literal searches via `grep_search` may be required if Knowledge Graph mapping fails.
+    Best for: 'Jump to Definition' to understand implementation details or resolve imports.
 
     Args:
-        filename: The file where the symbol is being used.
-        line: The line number of the usage (must be exactly on the line where the symbol
-              is referenced/called).
-        symbol_name: The exact name of the function, class, or variable to find.
-        root_path: Project root for context.
+        filename: Absolute path to the file where the symbol is used.
+        line: The line number where the symbol is referenced (1-indexed).
+        symbol_name: The exact name of the function, class, or variable.
+        root_path: MUST be the absolute path to the active workspace project root. NEVER use '.' or relative paths.
     """
     norm_root = normalize_path(root_path)
     norm_file = normalize_path(filename)
@@ -175,21 +153,15 @@ async def find_definition(
 
 
 @mcp.tool()
-async def find_references(symbol_name: str, root_path: str = ".") -> str:
+async def find_references(symbol_name: str, root_path: str) -> str:
     """
     Finds all locations where a specific symbol is used or called.
 
-    BEST FOR:
-    - Assessing the impact of a refactor or breaking change.
-    - Finding examples of how a utility function is utilized in real scenarios.
-    - Tracking middleware dependencies (e.g. FastAPI `Depends()`, standard decorators).
-
-    Note: Tracking dynamic middleware injection requires that `refresh_index` with
-    `force_full_scan=True` is run on the workspace.
+    Best for: Assessing refactoring impact or finding usage examples of a shared utility.
 
     Args:
-        symbol_name: The exact name of the symbol to track references for.
-        root_path: Project root context.
+        symbol_name: The exact name of the symbol to track.
+        root_path: MUST be the absolute path to the active workspace project root. NEVER use '.' or relative paths.
     """
     norm_root = normalize_path(root_path)
     return await find_references_impl(symbol_name, norm_root, _get_ctx())
