@@ -1,173 +1,167 @@
-# Project Plan: Code Intelligence MCP Server
+# Project Plan: Structural Context Reboot
 
 ## Overview
 
-A lightweight, high-performance MCP server providing semantic code search and AST-aware indexing, optimized for modern AI agents (e.g., Antigravity).
+This branch treats `code-intel` as a rebooted project.
 
-## Architecture
+The old direction centered on broad semantic retrieval and incremental feature expansion. The reboot direction is narrower and stricter: prove that `code-intel` can become a fast, trustworthy structural context service for coding agents.
 
-- **Parser**: Tree-sitter (multi-language support).
-- **Storage**: LanceDB (local vector storage).
-- **Embeddings**: Jina Embeddings v2 Base Code via Ollama.
-- **Runtime**: Python 3.11+ with `fastmcp`.
+This document intentionally tracks only the reboot roadmap.
 
-## Milestones
+## Product Thesis
 
-### Milestone 1: Core AST Indexing (Completed)
+Agents already have strong direct navigation tools such as file search, targeted reads, and language-server assistance.
 
-- [x] Basic Tree-sitter integration.
-- [x] Semantic chunking logic.
-- [x] Multi-language support (Python, JS, TS, etc.).
+`code-intel` is only worth continuing if it can do something meaningfully better than those fallbacks for a narrow set of high-value tasks:
 
-### Milestone 2: High-Fidelity Metadata & Stability (Completed)
+- identify risky refactor zones quickly
+- expose dependency hubs and high-risk symbols
+- maintain useful cross-file structural context
+- estimate blast radius after changes
+- narrow likely test impact
 
-- [x] Advanced AST Parsing for Symbol Recognition.
-- [x] Complexity Scoring (Cyclomatic).
-- [x] Dependency Analysis (Import Mapping).
-- [x] Git History extraction (Author/Date).
-- [x] Enhanced `get_stats` with language and architectural insights.
-- [x] "Deep Insights" Stats (Dependency Hubs, Test Gaps, Project Pulse).
-- [x] Stdout Protection (Fortress) for protocol stability.
-- [x] Multi-Project Isolation: Vector storage isolation using project root path hashing.
-- [x] Search Visibility: Exposed Author, Date, and Dependencies in search output.
-- [x] Optimization of embedding latency via local Ollama caching.
+## Reboot Principles
 
-### Milestone 3: Advanced Intelligence (Cross-File & Graph) (Completed)
+1. Structural correctness is more important than semantic richness.
+2. Incremental refresh must be cheap enough to run often.
+3. Graph state must stay trustworthy during common refactors.
+4. Embeddings are enrichment, not the foundation of correctness.
+5. The branch succeeds only if benchmarked agent usefulness improves.
 
-- [x] **Phase 3.1: Import Resolution Engine**
-  - [x] Implement language-specific import resolvers (Python: `sys.path` logic, JS/TS: `node_modules` + `tsconfig`, Dart: `package:`).
-  - [x] Map "string imports" to "file system paths".
-- [x] **Phase 3.2: Usage & Reference Analysis**
-  - [x] Advanced Tree-sitter queries to find *usages* of symbols (not just definitions).
-- [x] **Phase 3.3: Knowledge Graph Persistence**
-  - [x] New storage layer (SQLite "edges" table).
-  - [x] Store relationships: `(SourceChunk) -> (TargetChunk)`.
-- [x] **Phase 3.4: "Trace" Tooling**
-  - [x] New tool `find_references(symbol)` and `find_definition(symbol)`.
-- [x] **Phase 3.4.6: Global Symbol Excellence**
-  - [x] Index top-level variables and constants (Dart/Python).
-  - [x] Enable cross-file navigation for non-structural symbols.
-- [x] **Phase 3.5: Domain-Specific Intelligence (Selos Specials)**
-  - [x] **Firestore Rules**: Index `match` paths for client-side linking.
-  - [x] **Mermaid**: Extract labels from diagrams to link documentation to code.
-- [ ] **Phase 3.6: Advanced Linking & Discovery**
-  - [ ] **Granular Symbol Mapping**: Link string literals in code to Firestore `match` paths.
-  - [ ] **Mermaid "Soft Links"**: Connect diagram node labels to actual class/function definitions.
-  - [ ] **Script Discovery**: Implement heuristic linking for standalone scripts (no imports).
-  - [ ] **Entry-Point Detection**: Weight files with `main` blocks higher in the Knowledge Graph.
-- [ ] Integration with more LLM providers.
-- [ ] Real-time indexing on file change.
+## Branch Scope
 
-### Milestone 4: Deployment & DX
+- Branch of record: `feature/structural-context-pivot`
+- Mode: time-boxed rescue attempt
+- Main question: should this project continue under the new structural-context thesis?
 
-- [x] **Verification:** Full suite verification (Rebuild, Search, Stats, Graph) passed on fresh install.
-- [x] **Scope Tuning:** Add `include` and `exclude` glob patterns to `search_code` and `refresh_index`.
-- [x] **Infrastructure**: Optimized for Windows (CPU fix) and Jina embeddings.
-- [x] **Security Hardening**: Remediated findings from audit (SQLi, Pickle, Path Traversal). Added robust sanitization and path containment.
-- [x] **Professional Standards**: Added MIT License, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, and `SECURITY.md`.
-- [x] **Release Automation**: Implemented GitHub Action for automated releases on version tags.
+## Reboot Success Criteria
 
-- [ ] One-click installers/packages.
-- [ ] Comprehensive CLI dashboard.
-- [ ] **Structural Impact Analysis** (Blast Radius for Refactoring).
-- [ ] **Deep AST Support for DI frameworks** (FastAPI Depends / Riverpod).
+The reboot is considered successful only if all of the following become true:
 
-### Milestone 5: Code Quality & Refactoring (In Progress)
+1. partial refresh on large repositories is materially faster than the current behavior
+2. incremental refresh no longer leaves obviously stale graph state after rename, move, and delete workflows
+3. structural tools remain usable when embeddings are delayed or unavailable
+4. impact analysis provides first-pass value beyond raw search alone
+5. the touched code remains above the repository quality gate
 
-- [x] **Wave 1: Quick Wins** (Sorting logic, inline imports, exception handling, config bug).
-- [x] **Wave 2: Structural Decomposition** (`server.py` → `src/tools/`, `src/indexer.py`, `src/context.py`; AppContext DI container; 83% test coverage).
-- [x] **Wave 3: Performance & Core Refactor** (Strategy Pattern, Persistence, Pass 2 Caching).
-- [x] **Wave 4: Production-Grade Scaling** (LanceDB Caching, SQLite Transaction Batching).
-- [x] **Wave 5: Secondary Remediation** (Sub-module test normalization, CI security automation).
-- [ ] **Wave 6: Enhanced Agent Observability** (Index Metadata & Git Summaries).
+## Architecture Baseline
 
-### Milestone 6: Agent Navigation & Health
+The reboot keeps these core assets:
 
-- [x] **Phase 6.1: Indexing Intelligence**
-  - [x] Persist last index runtime, type, and embedding model in LanceDB.
-  - [x] Add "Codebase Freshness" spot-check metrics.
-- [x] **Phase 6.2: Git Activity Insight**
-  - [x] Integrate latest commit summary and repository "dirty" status into `get_stats`.
-- [x] **Phase 6.3: Architectural Guardian**
-  - [x] Automated 200/50 rule violation reporting for large files/methods.
+- Tree-sitter-based parsing
+- chunked structural representation
+- graph-backed cross-file relationships
+- MCP delivery model
+- existing health and stats concepts
 
-### Milestone 7: Retrieval Precision & Agent Trust
+The reboot changes the execution model:
 
-Goal: Increase practical value for AI agents by reducing false-positive discovery, improving dynamic-framework navigation, and making result confidence easier to operationalize.
+- structural indexing becomes the authoritative path
+- embeddings become optional enrichment
+- impact analysis becomes a first-class workflow
 
-Current status note from the 2026-03-09 external retest: all evaluated tool modules now pass. The remaining work in this milestone is cleanup and quality hardening, not recovery from benchmark regressions.
+The preferred architecture and technology direction are documented in `docs/architecture/REBOOT_ARCHITECTURE.md`.
 
-- [x] **Phase 7.1: Source-First Retrieval Ranking**
-  - [x] Add ranking priors so implementation files outrank documentation for code-intent queries.
-  - [x] De-prioritize `docs/` and report artifacts unless the query intent is explicitly documentation-oriented.
-  - [x] Surface result classification metadata such as `source`, `test`, `docs`, and `report` in search results.
-  - [x] Rebalance reranking so semantic relevance remains primary and raw complexity cannot promote weak matches above strong source candidates.
-  - [x] Add default or strongly documented exclusion patterns for generated/build artifacts such as `**/GeneratedPluginRegistrant.*`, `**/generated/**`, and `**/build/**`.
-  - [ ] Add an optional source-biased search mode for agent workflows that need implementation candidates first.
-  - [x] Validate improvements against benchmark queries where documentation currently outranks code.
-- [x] **Phase 7.2: Framework-Aware Reference Semantics**
-  - [x] Expand Python dependency-injection detection for FastAPI-style `Depends` flows.
-  - [x] Extend Python usage extraction/linking to capture import references and common test override paths so reference recall improves before confidence tuning.
-  - [ ] Classify graph relationships by reference kind: import, call, dependency-injection, decorator, and instantiation.
-  - [x] Improve confidence labeling in reference results so agents can distinguish exact structural matches from heuristic matches.
-  - [x] Add focused regression tests for framework-owned symbols and middleware-style registration paths.
-- [x] **Phase 7.3: Query Intent & Agent Guidance**
-  - [x] Add lightweight query-intent heuristics to distinguish code lookup from architecture/documentation exploration.
-  - [x] Bias semantic retrieval toward source paths when the query expresses implementation intent.
-  - [ ] Recommend scoped search patterns when the repository contains high-volume documentation noise.
-  - [x] Expose guidance that helps agents choose between `search_code`, `find_definition`, and `find_references` based on intent.
+## Reboot Milestones
 
-#### Milestone 7 Exit Cleanup Before Milestone 8
+### Milestone R0: Reboot Alignment
+- **Status:** In progress
+- **Goal:** reset docs, branch narrative, contracts, and implementation planning around the new direction.
+- **Deliverables:**
+	- [x] reboot branch created
+	- [x] core contract rewritten for structural-first behavior
+	- [x] reboot implementation plan created
+	- [x] README, project plan, and progress reset around the reboot
+	- [x] reboot tool surface locked with keep, add, and compatibility decisions
+	- [x] preferred architecture and technology direction documented
+	- [x] reboot benchmark protocol captured
 
-- [x] Resolve the semantic search regression verified on 2026-03-09, where generated artifacts can outrank relevant source files for unrelated queries.
-- [x] Add regression coverage proving generated files and metadata-heavy artifacts cannot dominate top search ranks for implementation-intent queries.
-- [x] Improve Python reference recall for imports and test-override cases before treating DI confidence semantics as stable.
-- [ ] Tighten confidence normalization so heuristic `name_match` results cannot be promoted above Low confidence solely because the usage context appears framework-specific.
-- [ ] Add a regression test proving documentation-intent queries can still prefer docs/report content when appropriate.
-- [ ] Add a regression test proving framework-shaped heuristic `name_match` results remain Low confidence.
-- [x] Update validation artifacts to reflect the current full-suite measurement baseline (`126` tests passed; latest measured coverage baseline remains `83%`) unless a narrower scoped coverage figure is explicitly called out.
-- [ ] Update retrieval wording in user-facing docs to describe source-first behavior as a ranking bias, not a guaranteed source-only retrieval mode.
-- [ ] Triage and prioritize post-validation cleanup for deprecated `table_names()` usage and current async warning paths before starting Milestone 8.
+### Milestone R1: Graph Freshness
+- **Status:** Not started
+- **Goal:** make incremental graph state trustworthy.
+- **Deliverables:**
+	- [ ] project-scoped graph ownership
+	- [ ] stale edge invalidation for changed files
+	- [ ] removal handling for deleted and moved files
+	- [ ] regression tests for rename, move, delete, and symbol split cases
 
-### Milestone 8: Benchmarking & Decision Support
+### Milestone R2: Cheap Incremental Refresh
+- **Status:** Not started
+- **Goal:** remove the current whole-tree cost profile from partial refresh.
+- **Deliverables:**
+	- [ ] manifest-based or diff-aware change detection
+	- [ ] unchanged refresh path that avoids rehashing every candidate file
+	- [ ] filtered refresh behavior preserved
+	- [ ] benchmark comparison on `selos`
 
-Goal: Turn external evaluation feedback into a repeatable quality gate that helps decide when tool investment creates enough cross-project value.
+### Milestone R3: Structural-First Indexing
+- **Status:** Not started
+- **Goal:** remove embeddings from the blocking correctness path.
+- **Deliverables:**
+	- [ ] structural indexing completes without waiting on embeddings
+	- [ ] deferred or background embedding enrichment
+	- [ ] degraded-but-useful behavior when embedding infrastructure is unavailable
+	- [ ] `get_index_status` implemented for trust and freshness visibility
+	- [ ] regression coverage for slow and unavailable embedding scenarios
 
-Entry criteria: do not start this milestone until the remaining Milestone 7 cleanup-gate items are closed, otherwise the benchmark suite will formalize behavior that still has known confidence and warning-cleanup debt.
+### Milestone R4: Agent-Facing Tooling
+- **Status:** Not started
+- **Goal:** add the first reboot-native agent tools with clear value.
+- **Deliverables:**
+	- [ ] `inspect_symbol` contract and implementation
+	- [ ] `impact_analysis` contract finalized
+	- [ ] `impact_analysis` implementation
+	- [ ] explainable output with reasons and confidence labels
+	- [ ] test impact candidates included in the analysis output
 
-- [ ] **Phase 8.1: Repeatable Retrieval Benchmark Suite**
-  - [ ] Create benchmark scenarios for definition lookup, reference recall, semantic precision, and documentation-noise suppression.
-  - [ ] Capture representative cases from external evaluations as reusable fixtures and expected outcomes.
-  - [ ] Add regression coverage for low-confidence Python DI and framework-registration patterns.
-- [ ] **Phase 8.2: Agent-Centric Scoring Model**
-  - [ ] Score benchmark results by precision, trustworthiness, narrowing effort, and usefulness to downstream agents.
-  - [ ] Add reporting that makes it clear which capabilities are safe for first-pass use versus verification-required use.
-  - [ ] Track whether improvements reduce follow-up manual search steps for agents.
-- [ ] **Phase 8.3: Roadmap Decision Signals**
-  - [ ] Define milestone exit criteria for search ranking quality, reference confidence, and benchmark pass thresholds.
-  - [ ] Add release-readiness signals that show when the tool is strong enough to justify focused investment over parallel project work.
-  - [ ] Summarize benchmark deltas in project status artifacts for easier prioritization reviews.
+### Milestone R5: Scoped Rich Enrichment
+- **Status:** Not started
+- **Goal:** keep expensive framework-aware analysis useful without putting it in the default refresh path.
+- **Deliverables:**
+	- [ ] `enrich_analysis` contract and implementation
+	- [ ] analyzer taxonomy for decorators, middleware, dependency injection, route registration, and test impact
+	- [ ] path-centered and neighborhood-aware enrichment behavior
+	- [ ] proof that rich analysis is optional and does not block structural correctness
 
-### Milestone 9: Agent Workflow Enablement
+### Milestone R6: Go Or No-Go Validation
+- **Status:** Not started
+- **Goal:** decide whether the reboot direction deserves continued investment.
+- **Deliverables:**
+	- [ ] before and after benchmark comparison
+	- [ ] trust evaluation on real refactor workflows
+	- [ ] security reasoning log for new logic
+	- [ ] continue, narrow, or stop recommendation
 
-Goal: Make `code-intel` more predictable and more valuable as a default first-step tool for cloud agents operating across unfamiliar repositories.
+## Deferred Legacy Backlog
 
-- [ ] **Phase 9.1: Confidence-Aware Workflow Documentation**
-  - [ ] Document a standard two-step workflow: `code-intel` candidate discovery followed by narrow literal verification for heuristic cases.
-  - [ ] Add confidence interpretation guidance to help agents decide when direct action is safe.
-  - [ ] Publish query cookbook examples for Python, Dart, and mixed documentation-heavy repositories.
-- [ ] **Phase 9.2: Path Scoping & Workflow Ergonomics**
-  - [ ] Make include/exclude scoping more discoverable in user-facing docs and examples.
-  - [ ] Add examples that bias search to implementation directories before broad repository exploration.
-  - [ ] Highlight best-practice workflows for code changes, impact analysis, and architectural reconnaissance.
-- [ ] **Phase 9.3: Cross-Project Value Packaging**
-  - [ ] Identify which improvements most reduce agent uncertainty across non-trivial repositories.
-  - [ ] Document reusable patterns for teams adopting `code-intel` in other codebases.
-  - [ ] Tie documentation updates to benchmark-backed claims so positioning remains evidence-based.
+The following legacy items remain valid only if the reboot succeeds:
 
-## Recommended Near-Term Execution Order
+- packaging and installer work
+- dashboard work
+- real-time indexing on file change
+- additional retrieval cleanup
+- broader provider integrations
+- advanced linking experiments
 
-1. **Milestone 7 Exit Cleanup:** finish confidence normalization, regression coverage, wording fixes, and warning triage.
-2. **Milestone 8:** convert the now-passing external evaluation into a repeatable benchmark and release-decision gate.
-3. **Milestone 9:** publish confidence-aware workflow guidance after benchmark-backed stability exists.
-4. **Later backlog:** resume Milestone 4 packaging/impact-analysis work, Milestone 3.6 advanced linking, Milestone 5 Wave 6 observability, broader provider integrations, and real-time indexing after retrieval trust is materially improved.
+They are intentionally not part of the reboot critical path.
+
+## Legacy Documentation Handling
+
+Legacy planning documents may remain in the repository for historical context, but they are no longer authoritative for this branch unless explicitly referenced by the reboot plan.
+
+## Implementation Plan Reference
+
+The working reboot plan is maintained in `docs/architecture/IMPLEMENTATION_PLAN-structural-context-pivot.md`.
+
+## Execution Order
+
+1. complete Milestone R0 baseline and benchmark setup
+2. execute R1 and R2 before any new feature expansion
+3. execute R3 before treating semantic search as a core promise
+4. execute R4 only after structural freshness is credible
+5. execute R5 only as scoped opt-in enrichment
+6. use R6 to decide whether the project continues in this new form
+
+## Benchmark Reference
+
+The active reboot benchmark protocol is maintained in `docs/architecture/BENCHMARK_PROTOCOL-structural-context-reboot.md`.

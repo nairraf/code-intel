@@ -1,47 +1,133 @@
-# Code Intelligence MCP Server 🧠
+# Code Intelligence MCP Server
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-Powered-orange.svg)](https://modelcontextprotocol.io)
-[![Coverage](https://codecov.io/gh/nairraf/code-intel/graph/badge.svg)](https://codecov.io/gh/nairraf/code-intel)
 
-Give your AI agents a "brain" that actually understands your codebase. This Model Context Protocol (MCP) server provides high-performance semantic search and deep code insights, making it easier for AI tools to navigate, understand, and modify complex projects.
+## Reboot Notice
 
-**This is not just a search tool; it is an analysis engine.** While standard Indexers just treat files as pure text, `code-intel` parses your codebase into a living knowledge graph. It maps abstract syntax trees (ASTs), dynamic dependencies, and architectural patterns, allowing your AI to enforce strict methodologies, understand blast radiuses, and confidently pair-program on enterprise-grade software.
+This feature branch is a reboot of `code-intel`.
 
----
+The old direction emphasized broad semantic retrieval. The reboot treats `code-intel` as a structural context service for coding agents: something that should help an agent identify risky areas, understand dependency structure, estimate blast radius, and decide what to read or test next.
 
-## 🚀 Quick Start
+This branch is intentionally being tracked as a separate direction. Planning, progress, and milestone reporting in this branch now describe the reboot rather than the legacy roadmap.
 
-### 1. Prerequisites
-Install [Ollama](https://ollama.com) and pull the high-precision embedding model:
-```bash
-ollama pull unclemusclez/jina-embeddings-v2-base-code
-```
+## What This Project Is Now
 
-### 2. Installation
+`code-intel` is an MCP server for agent-facing structural analysis of codebases.
 
-Choose one of the following methods to set up the project:
+The working thesis is simple:
 
-#### Option A: Clone the Repository (Recommended)
-Best for active development and staying up to date.
+- agents already have strong raw file navigation tools
+- they do not always have fast, trustworthy structural context
+- `code-intel` should earn its place by answering questions that are expensive to reconstruct ad hoc
+
+Examples:
+
+- what parts of this repo are risky to change?
+- what files or symbols are dependency hubs?
+- what is likely affected by this patch or refactor?
+- what tests are the best candidates to run next?
+
+## Reboot Goals
+
+The branch succeeds only if it proves these five things:
+
+1. partial refresh becomes cheap enough to run often
+2. incremental graph state stays trustworthy during common refactors
+3. structural tools remain useful even when embeddings are slow or unavailable
+4. impact analysis gives agents better first-pass guidance than raw search alone
+5. the implementation stays above the repository quality gate
+
+## Non-Goals For This Branch
+
+This branch is not trying to:
+
+- become a universal agent brain
+- replace editor-native language-server workflows
+- add more semantic features before freshness and trust are fixed
+- market the project more broadly before the reboot proves itself
+
+## Current Focus
+
+The current branch focus is the structural pivot tracked in [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md) and [docs/PROGRESS.md](docs/PROGRESS.md).
+
+The immediate implementation plan is tracked in [docs/architecture/IMPLEMENTATION_PLAN-structural-context-pivot.md](docs/architecture/IMPLEMENTATION_PLAN-structural-context-pivot.md).
+
+## Planned Capabilities
+
+The reboot centers on four capabilities:
+
+1. structural-first indexing
+2. cheap incremental refresh
+3. trustworthy graph invalidation
+4. agent-facing impact analysis
+
+Semantic search still matters, but it becomes enrichment rather than the foundation of the product promise.
+
+## Technical Direction
+
+The reboot keeps and reuses the existing investment in:
+
+- Tree-sitter parsing
+- chunked code representation
+- graph-based cross-file intelligence
+- MCP-based tool delivery
+- many existing parser, resolver, and stats concepts
+
+The reboot also changes the architecture boundary in two important ways:
+
+- structural state should become authoritative independently of embeddings
+- vector and rich framework analysis should become optional enrichment layers
+
+The preferred architecture and technology direction for the reboot are documented in [docs/architecture/REBOOT_ARCHITECTURE.md](docs/architecture/REBOOT_ARCHITECTURE.md).
+
+## Preferred Tool Surface
+
+The preferred agent-facing tool surface for the reboot is:
+
+- `refresh_index`
+- `get_index_status`
+- `get_stats`
+- `inspect_symbol`
+- `impact_analysis`
+- `enrich_analysis`
+
+Secondary and compatibility tools remain available as needed:
+
+- `search_code`
+- `find_definition`
+- `find_references`
+
+The detailed contracts are defined in [docs/architecture/API_CONTRACT-core.md](docs/architecture/API_CONTRACT-core.md).
+
+## Quick Start
+
+### 1. Install dependencies
+
 ```bash
 git clone https://github.com/nairraf/code-intel.git
 cd code-intel
 uv sync
 ```
 
-#### Option B: Download Release (Quick Start)
-Best for a one-time setup or if you don't have Git installed.
-1. Download the latest [Source ZIP or Tarball](https://github.com/nairraf/code-intel/releases/latest).
-2. Extract the archive to your desired location.
-3. Open a terminal in the folder and run:
-   ```bash
-   uv sync
-   ```
+### 2. Optional embedding backend
 
-### 3. MCP Configuration
-Add the following to your AI client's MCP settings (e.g., Claude Desktop, Cursor, or Antigravity `mcp_config.json`). Replace `/path/to/code-intel` with the absolute path to this project.
+If you want semantic search and embedding-backed enrichment, install Ollama and pull the configured embedding model.
+
+```bash
+ollama pull unclemusclez/jina-embeddings-v2-base-code
+```
+
+The reboot direction assumes the server should still provide useful structural answers even when Ollama is unavailable.
+
+### 3. Run the MCP server
+
+```bash
+uv run python -m src.server
+```
+
+### 4. Example MCP configuration
 
 ```json
 {
@@ -55,125 +141,27 @@ Add the following to your AI client's MCP settings (e.g., Claude Desktop, Cursor
 }
 ```
 
----
+## Current Status
 
-## 🎯 Unique Advantages for Structured Engineering
+This branch is in reboot mode.
 
-While many tools offer basic semantic search, `code-intel` is purpose-built to enforce strict architectural rules and support advanced software engineering methodologies:
+- branch of record: `feature/structural-context-pivot`
+- current phase: planning and baseline alignment
+- next implementation target: graph freshness, cheap incremental refresh, and structural-first indexing
 
-*   **Project Pulse & Health Metrics**: Go beyond simple search. The internal engine actively identifies "Dependency Hubs", "High-Risk Symbols" (files with high complexity but low test coverage), tracking of Git activity alongside index freshness, and automated architectural validation (such as 200/50 file size rules). This directly guides refactoring efforts and enforces test-gated workflows.
-*   **Deep Framework Analysis**: Standard indexers often fail at mapping dynamic patterns. This server specifically tracks dynamic dependency injection (like Python's `Depends()`) and framework-specific middleware, allowing developers to keep business logic pure and fully mockable.
-*   **Targeted Re-Indexing**: Working in a massive mono-repo? You don't need to re-index the entire universe. Use targeted `include`/`exclude` patterns to update the knowledge graph on-the-fly for only the microservice or module you are actively developing.
-*   **Contract-First Validation**: By exposing the precise call graph and interface definitions, `code-intel` helps validate that implementations adhere to established API contracts and structural patterns before code is committed.
+The previously existing system remains the implementation base, but roadmap and reporting are now being evaluated against the reboot criteria rather than the legacy retrieval-centric roadmap.
 
----
+## Repository Documents
 
-## 🏗️ Technical Architecture
+- [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md): reboot roadmap and milestones
+- [docs/PROGRESS.md](docs/PROGRESS.md): reboot status and decision tracking
+- [docs/architecture/API_CONTRACT-core.md](docs/architecture/API_CONTRACT-core.md): pivoted tool contract
+- [docs/architecture/IMPLEMENTATION_PLAN-structural-context-pivot.md](docs/architecture/IMPLEMENTATION_PLAN-structural-context-pivot.md): working implementation plan
+- [docs/architecture/REBOOT_ARCHITECTURE.md](docs/architecture/REBOOT_ARCHITECTURE.md): preferred architecture and technology direction
 
-Code Intelligence uses a **Two-Pass Indexing** strategy to map your codebase into a hybrid search system.
+## License And Project Standards
 
-```mermaid
-graph TD
-    A[Project Root] --> B[File Scanner]
-    B -->|Pass 1| C[Tree-sitter Parser]
-    C --> D[Extraction: Symbols, Types, Defs]
-    D --> E[Ollama Embeddings]
-    E --> F[LanceDB Vector Store]
-    
-    B -->|Pass 2| G[Symbol Linker]
-    G --> H[Knowledge Graph]
-    H --> I[Edges: Calls/Imports]
-    
-    J[AI Client] --> K[MCP Server]
-    K --> L[Hybrid Query Engine]
-    L --> F
-    L --> H
-```
-
----
-
-## ✨ Key Features
-
-### Intelligent Caching
-Our embedding cache drastically reduces latency. By storing "fingerprints" of your code locally, we avoid re-calculating embeddings for unchanged files, making searches nearly instantaneous.
-
-### Semantic "Meaning-Based" Search
-Go beyond simple keyword matching. Search for concepts like "how do we handle user authentication?" and find the relevant logic even if the exact words aren't used.
-
-The latest retrieval pipeline adds **source-first ranking** for implementation-oriented queries, helping code results outrank documentation noise in doc-heavy repositories. Search responses now also expose **Result Type** and **Query Intent** metadata so agents can reason about whether a hit is source, test, docs, or report content.
-
-The March 2026 evaluation retest now grades all core tools as passing, including semantic search and Python reference tracing after the latest ranking and indexing improvements.
-
-### Cross-File Architecture Graph
-A persistent knowledge graph tracks imports and function calls across your entire project. This enables precise "Jump to Definition" and "Find References" that work reliably across many files, including advanced structural tracking for Dart widget instantiations and Python dependency injection (`Depends()`).
-
-Reference tracing output now includes normalized confidence labels and explicit **Reference Kind** metadata, making it easier for agents to distinguish high-confidence structural matches from lower-confidence heuristic matches.
-
-Recent Python improvements also index import references and common override-registration patterns, improving test-file recall and cross-file navigation in service-oriented backends.
-
-### Security & Quality Hardened
-Independently audited and remediated against OWASP Top 10 vulnerabilities. Includes robust sanitization for vector filters, safe JSON-based serialization, and strict path containment.
-
----
-
-## 🛠️ Tools & Tools Usage
-
-| Tool | Benefit to Cloud AI |
-|:---|:---|
-| `search_code` | **Token Saver**: Feeds the AI only the specific logic it needs to solve a task. |
-| `get_stats` | **Strategic Overview**: Identifies "Dependency Hubs" and "High-Risk" areas. |
-| `find_definition` | **Precise Navigation**: Jumps straight to the source of any symbol. |
-| `find_references` | **Impact Analysis**: Helps the AI understand side-effects across files. |
-| `refresh_index` | **On-Demand Sync**: Manually triggers a scan to update the code map. |
-
-### 💡 Example AI Prompts
-Try asking your AI agent:
-* *"Give me a high-level overview of the dependency hubs in this project and identify any potential technical debt."*
-* *"Find where the `AuthenticationService` is defined and show me all the places it is referenced."*
-* *"How does this project handle error logging across different modules?"*
-
----
-
-## 🌐 Supported Languages
-While we support 80+ languages via Tree-sitter, we provide optimized resolution for:
-* **Python** (Advanced import resolution, FastAPI/Flask dependency injection)
-* **Dart / Flutter** (Package resolution, Widget structural mapping)
-* **TypeScript / JavaScript** (ESM/CommonJS module resolution)
-* **Go & Rust**
-
----
-
-## 🔧 Troubleshooting
-
-| Issue | Potential Solution |
-| :--- | :--- |
-| **"Connection Refused"** | Ensure Ollama is running (`ollama serve`). |
-| **"Model Not Found"** | Run `ollama pull` for the Jina model. |
-| **"0 Chunks Indexed"** | Ensure project root path is absolute and extensions are supported. |
-| **Slow Performance** | First-time indexing is resource-intensive; subsequent runs use the cache. |
-
----
-
-## 🚀 Recent Updates
-* **Agent Observability**: Integrated Git workspace activity ("dirty" status, commit hooks) with local Index Metadata to provide agents an immediate "Codebase Freshness" spot-check via `get_stats`.
-* **Architectural Guardian**: Enforced the 200/50 rule directly within `get_stats`, automatically identifying codebase violations (files > 200 lines).
-* **Production Scaling**: LanceDB table handle caching and batched SQLite transactions.
-* **Robust Windows Support**: Fixed concurrency race conditions and standardized path normalization.
-* **Scope Tuning**: Added `include`/`exclude` glob patterns for specialized indexing.
-* **Retrieval Precision**: Added source-first ranking, query-intent classification, and result-type metadata for better agent search behavior.
-* **Search Ranking Fix**: Prevented generated artifacts such as `GeneratedPluginRegistrant.java` from dominating semantic search results.
-* **Reference Clarity**: Added richer confidence and reference-kind reporting in `find_references` output.
-* **Python Recall Improvements**: Added Python import and override-registration indexing for better cross-file reference coverage.
-* **Security Hardening**: Integrated automated secret scanning (Gitleaks) into CI.
-
-## 📍 Current Status
-
-The latest full regression run passed with `126` tests, and the latest external evaluation now grades all major code-intel modules as passing. The immediate next work is Milestone 7 cleanup: confidence normalization hardening, documentation-intent regression coverage, wording cleanup, and warning triage before benchmark packaging begins.
-
----
-
-## 🧪 License & Contributing
-* **License**: [MIT License](LICENSE)
-* **Contributing**: See [CONTRIBUTING.md](CONTRIBUTING.md)
-* **Conduct**: See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-* **Security**: See [SECURITY.md](SECURITY.md)
+- [LICENSE](LICENSE)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- [SECURITY.md](SECURITY.md)

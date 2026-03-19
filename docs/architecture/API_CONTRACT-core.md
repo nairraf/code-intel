@@ -1,127 +1,397 @@
-# API Contract: Core Retrieval Behavior
+# API Contract: Structural Context Reboot
 
 ## Overview
-This document outlines the core retrieval behavior for [`search_code`](src/tools/search.py:19), [`find_definition`](src/tools/definition.py:46), and [`find_references`](src/tools/references.py:18), including scope tuning and Milestone 7 retrieval-precision enhancements.
 
-## Core Principles
+This document defines the rebooted tool surface for `code-intel` as a structural context service for agents.
 
-### 1. Glob-Based Filtering
-We adopt standard glob pattern semantics (similar to `.gitignore` and `fnmatch`) to filter files.
+The design goal is not to expose internal implementation layers directly. The design goal is to expose the agent jobs that repeatedly matter across repositories:
 
-### 2. Source-First Retrieval
-When the user intent appears implementation-oriented, retrieval should prefer source files over documentation and report artifacts.
+- refresh structural truth cheaply
+- determine whether the current index is trustworthy
+- inspect a symbol or area with confidence signals
+- estimate blast radius for a change
+- request deeper framework-aware enrichment only when needed
 
-### 3. Confidence-Aware References
-Reference results should communicate both the structural match type and a normalized confidence level so agents can decide when follow-up verification is needed.
+This contract intentionally prioritizes:
 
-### 4. Agent-Guided Discovery
-Search results should expose enough metadata for downstream agents to understand whether the hit is code, test, documentation, or report content.
+- structured outputs over prose-heavy strings
+- explicit trust and freshness signals
+- separation of exact facts from inferred facts
+- structural correctness over semantic richness
 
-### Syntax
-- `*`: Matches any sequence of characters (excluding path separators).
-- `?`: Matches any single character.
-- `**`: Matches directories recursively.
-- `[seq]`: Matches any character in seq.
-- `[!seq]`: Matches any character not in seq.
+## Contract Principles
+
+### 1. Structural Correctness First
+Definitions, references, dependency edges, and project health metrics must remain useful even when embeddings are missing, stale, or delayed.
+
+### 2. Trust Must Be Visible
+Every non-trivial tool response must make freshness, degraded mode, and confidence visible without requiring the caller to infer them from narrative text.
+
+### 3. Core Facts And Enriched Inference Are Separate
+Exact structural facts and heuristic or framework-aware inferred facts must be distinguishable in both storage and output schemas.
+
+### 4. Cheap Refresh Is The Default
+The normal refresh path must stay cheap enough for frequent use. Expensive framework or middleware analysis must be opt-in and scoped.
+
+### 5. Agent Jobs Define The Tool Surface
+The primary tools should reflect what an agent is trying to decide, not merely how the internal pipeline is implemented.
+
+## Shared Types
+
+### Common Status Values
+- `ok`
+- `degraded`
+- `stale`
+- `error`
+
+### Common Confidence Values
+- `exact`
+- `high`
+- `medium`
+- `low`
+
+### Common Evidence Fields
+Every response that reports findings should support evidence items with these fields when applicable:
+
+```json
+{
+    "kind": "import|call|dependency_injection|decorator|instantiation|override_registration|heuristic|text_match",
+    "reason": "human-readable explanation",
+    "source": "path/to/file.py",
+    "line": 42,
+    "confidence": "exact|high|medium|low"
+}
+```
+
+### Common Freshness Object
+Every response that depends on index state should support a freshness block shaped like:
+
+```json
+{
+    "projectRoot": "d:/repo",
+    "structuralState": "current|partial|stale|missing",
+    "enrichmentState": "ready|partial|pending|disabled|failed",
+    "lastStructuralRefreshAt": "ISO-8601 timestamp or null",
+    "lastEnrichmentAt": "ISO-8601 timestamp or null",
+    "scope": {
+        "include": "glob or null",
+        "exclude": "glob or null"
+    },
+    "warnings": ["string"]
+}
+```
+
+## Shared Path And Scope Rules
+
+### Glob Syntax
+- `*`: matches any sequence of characters excluding path separators
+- `?`: matches any single character
+- `**`: matches directories recursively
+- `[seq]`: matches any character in `seq`
+- `[!seq]`: matches any character not in `seq`
 
 ### Path Resolution
-- All globs are matched against the **file path relative to the project root**.
-- Leading slashes (`/foo`) anchor to the project root.
-- No leading slash (`foo`) matches anywhere in the tree (unless containing path separators).
+- All include and exclude globs are matched against the path relative to `root_path`.
+- `src/config.py:IGNORE_DIRS` remain hard exclusions unless the contract is explicitly revised.
+- `exclude` always overrides `include`.
 
-## Tool Updates
+## Tool Taxonomy
+
+### Primary Agent-Facing Tools
+- `refresh_index`
+- `get_index_status`
+- `inspect_symbol`
+- `get_stats`
+- `impact_analysis`
+- `enrich_analysis`
+
+### Secondary Discovery Tool
+- `search_code`
+
+### Compatibility Tools
+- `find_definition`
+- `find_references`
+
+## Tool Contracts
 
 ### 1. `refresh_index`
-**Purpose**: Update index with strict control over what gets scanned.
+**Role**: cheap structural synchronization
 
-#### New Signature
+#### Contract
 ```python
 async def refresh_index(
-    root_path: str = ".",
-    force_full_scan: bool = False,
-    include: str = None,  # Glob pattern
-    exclude: str = None   # Glob pattern
-) -> str
+        root_path: str,
+        force_full_scan: bool = False,
+        include: str | None = None,
+        exclude: str | None = None,
+        changed_files: list[str] | None = None,
+) -> dict
 ```
 
-#### Behavior
-- `include`: If provided, ONLY files matching this glob are indexed. If `None` (default), all supported files are candidates.
-- `exclude`: Files matching this glob are SKIPPED, even if they match `include`.
-- **Precedence**: `exclude` > `include`.
-- **Defaults**: `src/config.py:IGNORE_DIRS` are ALWAYS excluded unless explicitly overridden (TBD: do we want to allow overriding system ignores?). *Decision: System ignores are hard rules. Excludes add to them.*
+#### Required Behavior
+- A structural refresh must complete even if embedding generation is slow or unavailable.
+- Full rebuilds may clear project-owned vector and graph state.
+- Incremental refresh must invalidate stale project-owned edges for changed, removed, or moved files before relinking.
+- Incremental refresh should prefer manifest or diff-aware detection over hashing every candidate file on every run.
+- `changed_files` is a caller hint, not an authority; the implementation may validate or expand it.
 
-### 2. `search_code`
-**Purpose**: Reduce noise in search results.
+#### Response Shape
+```json
+{
+    "status": "ok|degraded|error",
+    "summary": "human-readable summary",
+    "freshness": {},
+    "counts": {
+        "filesScanned": 0,
+        "filesChanged": 0,
+        "filesSkipped": 0,
+        "chunksIndexed": 0,
+        "edgesRebuilt": 0
+    },
+    "degradedMode": false,
+    "warnings": ["string"]
+}
+```
 
-#### New Signature
+### 2. `get_index_status`
+**Role**: trust and freshness inspection
+
+#### Contract
+```python
+async def get_index_status(root_path: str) -> dict
+```
+
+#### Required Behavior
+- Report whether structural state exists and whether it appears fresh enough for agent use.
+- Report whether enrichment is ready, pending, disabled, or failed.
+- Report any known trust limitations such as partial scope, stale graph warnings, or disabled analyzers.
+
+#### Response Shape
+```json
+{
+    "status": "ok|stale|missing|error",
+    "freshness": {},
+    "capabilities": {
+        "structuralNavigation": true,
+        "impactAnalysis": false,
+        "semanticSearch": true,
+        "richFrameworkAnalysis": false
+    },
+    "warnings": ["string"]
+}
+```
+
+### 3. `inspect_symbol`
+**Role**: unified symbol inspection for agents
+
+#### Contract
+```python
+async def inspect_symbol(
+        root_path: str,
+        symbol_name: str,
+        filename: str | None = None,
+        line: int | None = None,
+        include_references: bool = True,
+        include_dependents: bool = False,
+        max_references: int = 50,
+) -> dict
+```
+
+#### Required Behavior
+- Return the best structural definition candidates and, when requested, references.
+- Prefer exact structural matches over semantic or heuristic matches.
+- Keep exact facts separate from inferred or heuristic facts.
+- Remain usable when embeddings are unavailable.
+
+#### Response Shape
+```json
+{
+    "status": "ok|degraded|error",
+    "freshness": {},
+    "symbol": "target symbol",
+    "definitions": [
+        {
+            "file": "path/to/file.py",
+            "startLine": 1,
+            "endLine": 20,
+            "language": "python",
+            "confidence": "exact",
+            "evidence": []
+        }
+    ],
+    "references": [
+        {
+            "file": "path/to/caller.py",
+            "line": 14,
+            "kind": "call",
+            "confidence": "high",
+            "evidence": []
+        }
+    ],
+    "warnings": ["string"]
+}
+```
+
+### 4. `get_stats`
+**Role**: repository orientation and hotspot detection
+
+#### Contract
+```python
+async def get_stats(root_path: str) -> dict
+```
+
+#### Required Behavior
+- Continue to report dependency hubs, high-risk symbols, stale files, and structural rule violations.
+- Prefer fast structural data sources over semantic data sources.
+- Include freshness metadata and trust warnings.
+
+### 5. `impact_analysis`
+**Role**: blast-radius and likely test-impact analysis
+
+#### Contract
+```python
+async def impact_analysis(
+        root_path: str,
+        changed_files: list[str] | None = None,
+        changed_symbols: list[str] | None = None,
+        patch_text: str | None = None,
+        include_tests: bool = True,
+        max_results: int = 50,
+) -> dict
+```
+
+#### Required Behavior
+- Accept changed files, changed symbols, patch text, or a combination.
+- Return affected symbols, dependent files, related tests, and explicit reasons.
+- Separate exact structural impact from heuristic or enriched impact.
+- Never present heuristic guesses as exact truth.
+
+#### Response Shape
+```json
+{
+    "status": "ok|degraded|error",
+    "freshness": {},
+    "summary": "human-readable summary",
+    "affectedFiles": [
+        {
+            "file": "path/to/file.py",
+            "confidence": "high",
+            "reasons": ["imports changed symbol", "calls affected function"],
+            "evidence": []
+        }
+    ],
+    "affectedSymbols": [
+        {
+            "symbol": "MyService",
+            "file": "path/to/service.py",
+            "confidence": "high",
+            "reasons": ["definition changed"],
+            "evidence": []
+        }
+    ],
+    "candidateTests": [
+        {
+            "file": "tests/test_service.py",
+            "confidence": "medium",
+            "reasons": ["related test heuristic", "imports affected module"],
+            "evidence": []
+        }
+    ],
+    "warnings": ["string"]
+}
+```
+
+### 6. `enrich_analysis`
+**Role**: scoped, expensive, framework-aware enrichment
+
+#### Contract
+```python
+async def enrich_analysis(
+        root_path: str,
+        include: str | None = None,
+        changed_files: list[str] | None = None,
+        analyzers: list[str] | None = None,
+        neighborhood_depth: int = 1,
+        include_tests: bool = True,
+) -> dict
+```
+
+#### Required Behavior
+- This tool is opt-in and must not be required for baseline structural correctness.
+- Accept a path-centered scope and optionally expand to nearby files through imports, dependents, or graph neighbors.
+- Allow explicit analyzer selection such as `python_decorators`, `python_middleware`, `dependency_injection`, `route_registration`, and `test_impact`.
+- Enriched inferred facts must remain distinguishable from exact structural facts.
+
+#### Response Shape
+```json
+{
+    "status": "ok|degraded|error",
+    "freshness": {},
+    "analyzersRun": ["python_middleware"],
+    "filesAnalyzed": ["src/api.py"],
+    "inferredFacts": [
+        {
+            "category": "middleware_chain",
+            "subject": "AuthMiddleware",
+            "confidence": "medium",
+            "reason": "decorator and registration pattern detected",
+            "evidence": []
+        }
+    ],
+    "warnings": ["string"]
+}
+```
+
+### 7. `search_code`
+**Role**: semantic discovery and recall enhancement
+
+#### Contract
 ```python
 async def search_code(
-    query: str,
-    root_path: str = ".",
-    limit: int = 10,
-    include: str = None,  # Glob pattern
-    exclude: str = None   # Glob pattern
-) -> str
+        query: str,
+        root_path: str,
+        limit: int = 10,
+        include: str | None = None,
+        exclude: str | None = None,
+) -> dict
 ```
 
-#### Behavior
-- **Backend**: Vector search retrieves chunks.
-- **Limit Bounds**:
-    - `limit` is clamped into a safe bounded range before retrieval.
-- **Filtering**:
-    - **Method A (Post-Filter)**: Retrieve `limit * X` results from DB. Filter in Python using `fnmatch`. Return top `limit`.
-    - **Method B (Pre-Filter)**: Apply SQL `WHERE` clause in LanceDB.
-        - *LanceDB Support*: Supports basic SQL. `WHERE filename LIKE '%pattern%'`.
-        - *Challenge*: Converting complex globs (`src/**/*.py`) to SQL/LanceDB filters might be fragile.
-    - **Decision for V1**: **Post-Filtering**. It's robust and predictable. We fetch `limit * 5` candidates, apply Python `fnmatch`, and return top `limit`.
-- **Intent Heuristics**:
-    - The query is classified into a lightweight intent family such as `implementation`, `framework`, `documentation`, or `general`.
-    - Implementation and framework-oriented queries receive stronger ranking bias toward source code.
-- **Ranking Bias**:
-    - Source files should outrank tests, and tests should usually outrank documentation and generated report content for implementation-oriented queries.
-    - Documentation-oriented queries may reduce or invert that bias.
-- **Result Metadata**:
-    - Each formatted result should include a result-class indicator such as `source`, `test`, `docs`, or `report`.
-    - Each formatted result should include a retrieval-intent indicator when available.
+#### Required Behavior
+- Search remains valuable, but it is explicitly a secondary discovery layer.
+- Search should use embeddings when available and literal fallback when needed.
+- Search must not be the only path to useful answers during active refactors.
 
-### 3. `find_references`
-**Purpose**: Return cross-file usages with clearer structural semantics for agents.
+### 8. `find_definition` And `find_references`
+**Role**: compatibility wrappers
 
-#### Current Signature
-```python
-async def find_references(
-    symbol_name: str,
-    root_path: str = "."
-) -> str
-```
+#### Required Behavior
+- Keep these tools for compatibility during the reboot.
+- Implement them in terms of `inspect_symbol` where practical.
+- Mark them as compatibility-oriented rather than the preferred long-term agent interface.
 
-#### Behavior
-- **Reference Kind Semantics**:
-    - Reference edges should distinguish between `import`, `call`, `dependency_injection`, `decorator`, and `instantiation` contexts where available.
-- **Confidence Semantics**:
-    - `explicit_import` and structurally resolved framework references should be reported as high confidence.
-    - Heuristic global symbol matches should be reported as medium or low confidence depending on context.
-- **Output Guidance**:
-    - The formatted response should expose both normalized confidence and the underlying match type so agents can decide whether secondary verification is required.
+## Keep, Rename, And Deprecate Guidance
 
-### 4. `find_definition`
-**Purpose**: Preserve source-first navigation behavior when multiple candidate definitions exist.
+### Keep As Primary
+- `refresh_index`
+- `get_stats`
 
-#### Behavior
-- When multiple candidates match, the ranking should continue to prefer same-language and higher-priority implementation files over lower-signal documentation artifacts.
+### Add As New Primary
+- `get_index_status`
+- `inspect_symbol`
+- `impact_analysis`
+- `enrich_analysis`
 
----
+### Keep As Secondary
+- `search_code`
 
-## Example Usage
+### Keep For Compatibility, Then Reevaluate
+- `find_definition`
+- `find_references`
 
-**Scenario**: "Search for 'authentication' but ignore tests."
-```python
-# User Query
-search_code("authentication", exclude="tests/**")
-```
+## Acceptance Criteria For The Reboot
 
-**Scenario**: "Re-index only the 'security' module."
-```python
-# User Command
-refresh_index(include="src/security/**")
-```
+- Partial refresh is materially cheaper than the current hash-every-file behavior on large repositories.
+- Stale graph edges no longer survive common incremental refactor workflows.
+- Structural tools remain usable without waiting for embeddings.
+- Agents can check trust and freshness explicitly through `get_index_status`.
+- Impact analysis produces better first-pass blast-radius guidance than raw search alone.
