@@ -87,6 +87,24 @@ async def test_impact_analysis_suppresses_same_file_local_symbol_noise(impact_pr
     assert service_payload["reasons"] == ["file changed"]
     assert any(item["file"].endswith("app.py") for item in result["affectedFiles"])
     assert any(item["file"].endswith("test_service.py") for item in result["affectedFiles"])
+    assert [item["symbol"] for item in result["affectedSymbols"]] == ["MyService"]
+
+
+@pytest.mark.asyncio
+async def test_impact_analysis_keeps_explicit_nested_symbol_inputs(impact_project, tmp_path):
+    structural_store = StructuralStore(str(tmp_path / "impact_explicit.sqlite"))
+    structural_refresher = StructuralRefresher(structural_store, CodeParser())
+
+    with patch("src.context._context.structural_store", structural_store), \
+         patch("src.context._context.structural_refresher", structural_refresher):
+        await refresh_index.fn(root_path=str(impact_project), force_full_scan=True)
+        result = await impact_analysis.fn(
+            root_path=str(impact_project),
+            changed_symbols=["do_work"],
+            include_tests=False,
+        )
+
+    assert any(item["symbol"] == "do_work" for item in result["affectedSymbols"])
 
 
 @pytest.mark.asyncio

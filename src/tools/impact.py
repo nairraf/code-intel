@@ -148,6 +148,8 @@ async def impact_analysis_impl(
         for record in ctx.structural_store.list_symbols(project_root, filename):
             if not is_concrete_definition_kind(record.symbol_kind):
                 continue
+            if record.parent_symbol:
+                continue
             affected_symbols_map[record.symbol_id] = {
                 "symbol": record.symbol_name,
                 "file": record.filename,
