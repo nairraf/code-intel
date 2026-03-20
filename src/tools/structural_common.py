@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from ..git_utils import check_git_dirty
@@ -16,6 +17,15 @@ def is_test_file(filename: str) -> bool:
         or name.endswith("_test.py")
         or ".test." in name
     )
+
+
+def is_concrete_definition_kind(symbol_kind: str) -> bool:
+    return symbol_kind not in {"import_statement", "import_from_statement"}
+
+
+def tokenize_identifier_parts(value: str) -> set[str]:
+    lowered = value.replace("\\", "/").lower()
+    return {token for token in re.split(r"[^a-z0-9]+", lowered) if token}
 
 
 def edge_confidence(match_type: str) -> str:

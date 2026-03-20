@@ -13,8 +13,8 @@ from src.structural_core.refresh import StructuralRefresher
 from src.structural_core.store import StructuralStore
 
 
-@pytest.fixture
-def impact_project(tmp_path):
+@pytest.fixture(name="impact_project")
+def fixture_impact_project(tmp_path):
     project_root = tmp_path / "impact_project"
     tests_dir = project_root / "tests"
     project_root.mkdir()
@@ -57,6 +57,36 @@ async def test_impact_analysis_finds_affected_files_symbols_and_tests(impact_pro
     assert any(item["file"].endswith("app.py") for item in result["affectedFiles"])
     assert any(item["symbol"] == "MyService" for item in result["affectedSymbols"])
     assert any(test["file"].endswith("test_service.py") for test in result["candidateTests"])
+    assert len(result["candidateTests"]) == 1
+    assert any(test["confidence"] == "exact" for test in result["candidateTests"])
+    assert any("structural dependency on changed symbol" in test["reasons"] for test in result["candidateTests"])
+
+
+@pytest.mark.asyncio
+async def test_impact_analysis_suppresses_same_file_local_symbol_noise(impact_project, tmp_path):
+    structural_store = StructuralStore(str(tmp_path / "impact_noise.sqlite"))
+    structural_refresher = StructuralRefresher(structural_store, CodeParser())
+
+    service_file = impact_project / "service.py"
+    service_file.write_text(
+        "class MyService:\n    def helper(self):\n        return 'ok'\n\n    def do_work(self):\n        return self.helper()\n",
+        encoding="utf-8",
+    )
+
+    with patch("src.context._context.structural_store", structural_store), \
+         patch("src.context._context.structural_refresher", structural_refresher):
+        await refresh_index.fn(root_path=str(impact_project), force_full_scan=True)
+        result = await impact_analysis.fn(
+            root_path=str(impact_project),
+            changed_files=[str(service_file)],
+            include_tests=True,
+        )
+
+    service_payload = next(item for item in result["affectedFiles"] if item["file"].endswith("service.py"))
+
+    assert service_payload["reasons"] == ["file changed"]
+    assert any(item["file"].endswith("app.py") for item in result["affectedFiles"])
+    assert any(item["file"].endswith("test_service.py") for item in result["affectedFiles"])
 
 
 @pytest.mark.asyncio

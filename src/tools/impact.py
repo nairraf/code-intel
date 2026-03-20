@@ -1,7 +1,14 @@
 import re
 from pathlib import Path
 
-from .structural_common import build_freshness, edge_confidence, is_test_file, parse_edge_metadata
+from .structural_common import (
+    build_freshness,
+    edge_confidence,
+    is_concrete_definition_kind,
+    is_test_file,
+    parse_edge_metadata,
+    tokenize_identifier_parts,
+)
 from ..utils import normalize_path
 
 
@@ -46,43 +53,73 @@ def _extract_inputs_from_patch(project_root: str, patch_text: str | None) -> tup
     return sorted(set(changed_files)), sorted(set(changed_symbols)), warnings
 
 
-def _candidate_tests(tracked_files: list[str], affected_files: list[str], affected_symbols: list[str], max_results: int) -> list[dict]:
+def _candidate_tests(
+    tracked_files: list[str],
+    affected_files: list[dict],
+    affected_symbols: list[dict],
+    max_results: int,
+) -> list[dict]:
     tests = [filename for filename in tracked_files if is_test_file(filename)]
     if not tests:
         return []
 
-    file_stems = {Path(filename).stem.replace("test_", "") for filename in affected_files}
-    symbol_names = {name.lower() for name in affected_symbols}
-    ranked: list[tuple[int, dict]] = []
+    ranked: dict[str, tuple[int, dict]] = {}
+
+    for affected_file in affected_files:
+        test_file = affected_file["file"]
+        if not is_test_file(test_file):
+            continue
+        ranked[test_file] = (
+            100,
+            {
+                "file": test_file,
+                "confidence": affected_file["confidence"],
+                "reasons": ["structural dependency on changed symbol"],
+                "evidence": list(affected_file["evidence"]),
+            },
+        )
+
+    if ranked:
+        ordered = sorted(ranked.values(), key=lambda item: (-item[0], item[1]["file"]))
+        return [payload for _, payload in ordered[:max_results]]
+
+    file_tokens = set()
+    for affected_file in affected_files:
+        file_tokens.update(tokenize_identifier_parts(Path(affected_file["file"]).stem))
+
+    symbol_tokens = set()
+    for affected_symbol in affected_symbols:
+        symbol_tokens.update(tokenize_identifier_parts(affected_symbol["symbol"]))
 
     for test_file in tests:
-        lowered = test_file.lower()
+        if test_file in ranked:
+            continue
+
+        test_tokens = tokenize_identifier_parts(test_file)
         reasons: list[str] = []
         score = 0
-        for stem in file_stems:
-            if stem and stem.lower() in lowered:
+        for token in file_tokens:
+            if token in test_tokens:
                 reasons.append("filename heuristic matches affected file")
                 score += 2
-        for symbol_name in symbol_names:
-            if symbol_name and symbol_name in lowered:
+        for token in symbol_tokens:
+            if token in test_tokens:
                 reasons.append("filename heuristic matches affected symbol")
                 score += 1
         if score == 0:
             continue
-        ranked.append(
-            (
-                score,
-                {
-                    "file": test_file,
-                    "confidence": "medium",
-                    "reasons": sorted(set(reasons)),
-                    "evidence": [],
-                },
-            )
+        ranked[test_file] = (
+            score,
+            {
+                "file": test_file,
+                "confidence": "medium",
+                "reasons": sorted(set(reasons)),
+                "evidence": [],
+            },
         )
 
-    ranked.sort(key=lambda item: (-item[0], item[1]["file"]))
-    return [payload for _, payload in ranked[:max_results]]
+    ordered = sorted(ranked.values(), key=lambda item: (-item[0], item[1]["file"]))
+    return [payload for _, payload in ordered[:max_results]]
 
 
 async def impact_analysis_impl(
@@ -109,6 +146,8 @@ async def impact_analysis_impl(
     affected_symbols_map: dict[str, dict] = {}
     for filename in normalized_changed_files:
         for record in ctx.structural_store.list_symbols(project_root, filename):
+            if not is_concrete_definition_kind(record.symbol_kind):
+                continue
             affected_symbols_map[record.symbol_id] = {
                 "symbol": record.symbol_name,
                 "file": record.filename,
@@ -126,7 +165,9 @@ async def impact_analysis_impl(
             }
 
     for symbol_name in normalized_changed_symbols:
-        for record in ctx.structural_store.find_symbols(project_root, symbol_name):
+        symbol_records = ctx.structural_store.find_symbols(project_root, symbol_name)
+        concrete_records = [record for record in symbol_records if is_concrete_definition_kind(record.symbol_kind)]
+        for record in concrete_records or symbol_records:
             payload = affected_symbols_map.setdefault(
                 record.symbol_id,
                 {
@@ -157,16 +198,26 @@ async def impact_analysis_impl(
             "evidence": [],
         }
 
+    changed_file_set = set(normalized_changed_files)
     incoming_edges = ctx.structural_store.list_incoming_edges(
         project_root,
         list(affected_symbols_map.keys()),
         edge_kind="call",
     )
+    seen_file_evidence: set[tuple[str, int, str, str]] = set()
     for edge in incoming_edges:
         metadata = parse_edge_metadata(edge)
         target_symbol = ctx.structural_store.get_symbol_by_id(project_root, edge.target_symbol_id)
         line_number = int(metadata.get("line", 0) or 0)
         match_type = metadata.get("match_type", "exact")
+        if match_type == "local_symbol" and edge.source_filename == edge.target_filename:
+            continue
+
+        evidence_key = (edge.source_filename, line_number, edge.target_symbol_id, match_type)
+        if evidence_key in seen_file_evidence:
+            continue
+        seen_file_evidence.add(evidence_key)
+
         confidence = edge_confidence(match_type)
         reason = "calls changed symbol"
         if target_symbol is not None:
@@ -180,7 +231,8 @@ async def impact_analysis_impl(
                 "evidence": [],
             },
         )
-        payload["reasons"].append(reason)
+        if edge.source_filename not in changed_file_set or reason not in payload["reasons"]:
+            payload["reasons"].append(reason)
         payload["evidence"].append(
             {
                 "kind": metadata.get("context", edge.edge_kind),
@@ -207,8 +259,8 @@ async def impact_analysis_impl(
     candidate_tests = (
         _candidate_tests(
             tracked_files,
-            [item["file"] for item in affected_files],
-            [item["symbol"] for item in affected_symbols],
+            affected_files,
+            affected_symbols,
             max_results,
         )
         if include_tests
