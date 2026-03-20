@@ -69,7 +69,11 @@ async def find_references_impl(
 
         all_refs = []
         for d in def_chunks:
-            edges = ctx.knowledge_graph.get_edges(target_id=d["id"], type="call")
+            edges = ctx.knowledge_graph.get_edges(
+                target_id=d["id"],
+                type="call",
+                project_root=project_root_str,
+            )
             for edge in edges:
                 source_id, _, _, meta = edge
                 source_chunk = ctx.vector_store.get_chunk_by_id(project_root_str, source_id)

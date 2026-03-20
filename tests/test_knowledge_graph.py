@@ -50,6 +50,42 @@ def test_get_edges_filters(temp_graph):
     assert len(res_import) == 1
     assert res_import[0][1] == "c"
 
+def test_get_edges_filters_by_project_root(temp_graph):
+    temp_graph.add_edge("a", "b", "call", project_root="repo-a")
+    temp_graph.add_edge("c", "d", "call", project_root="repo-b")
+
+    repo_a_edges = temp_graph.get_edges(project_root="repo-a")
+    repo_b_edges = temp_graph.get_edges(project_root="repo-b")
+
+    assert len(repo_a_edges) == 1
+    assert repo_a_edges[0][0] == "a"
+    assert len(repo_b_edges) == 1
+    assert repo_b_edges[0][0] == "c"
+
+def test_delete_file_edges_and_get_source_files(temp_graph):
+    temp_graph.add_edge(
+        "source_chunk",
+        "target_chunk",
+        "call",
+        project_root="repo",
+        source_filename="src/app.py",
+        target_filename="src/service.py",
+    )
+    temp_graph.add_edge(
+        "other_chunk",
+        "target_chunk",
+        "call",
+        project_root="repo",
+        source_filename="src/worker.py",
+        target_filename="src/service.py",
+    )
+
+    source_files = temp_graph.get_source_files("repo", ["src/service.py"])
+    assert set(source_files) == {"src/app.py", "src/worker.py"}
+
+    temp_graph.delete_file_edges("repo", ["src/service.py"])
+    assert temp_graph.get_edges(project_root="repo") == []
+
 def test_clear_graph(temp_graph):
     temp_graph.add_edge("a", "b", "call")
     assert len(temp_graph.get_edges()) == 1

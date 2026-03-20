@@ -3,6 +3,7 @@
 ## Phase 1: Foundation
 - [Architect] Update `docs/architecture/API_CONTRACT-core.md` to define the rebooted tool surface around agent jobs, including `refresh_index`, `get_index_status`, `inspect_symbol`, `impact_analysis`, and `enrich_analysis`.
 - [Architect] Create `docs/architecture/REBOOT_ARCHITECTURE.md` to capture preferred storage authority, dependency boundaries, reuse strategy, and phased technical direction.
+- [Architect] Create `docs/architecture/API_CONTRACT-structural_core.md` to define the minimum SQLite schema and internal interfaces for the parallel structural core rebuild.
 - [Architect] Update `docs/PROJECT_PLAN.md` with a dedicated pivot milestone, branch success criteria, and a stop-or-continue decision gate.
 - [Architect] Update `docs/PROGRESS.md` so current work reflects the structural pivot rather than retrieval cleanup as the primary program.
 - [Architect] Decide which existing tools stay primary, which become secondary, and which remain compatibility wrappers during the reboot.
@@ -22,27 +23,33 @@
 - [SeniorDev] Preserve include and exclude semantics while making unchanged refreshes materially cheaper on large repositories.
 - [Dev] Add tests for unchanged runs, one-file edits, multi-file edits, removed files, and filtered refresh scenarios.
 
-## Phase 4: Structural-First Indexing
-- [Architect] Define the lifecycle boundary between structural indexing and semantic enrichment.
-- [SeniorDev] Refactor refresh so parsing, chunk persistence, and graph linking complete before embeddings are required.
-- [SeniorDev] Add deferred or background embedding generation and expose enough state for callers to know whether enrichment is pending.
-- [SeniorDev] Add `get_index_status` so agents can check trust, freshness, and degraded-mode signals before relying on downstream analysis.
-- [Dev] Add regression coverage proving structural tools remain useful when embeddings are slow or unavailable.
+## Phase 4: Parallel Structural Core Foundation
+- [Architect] Define the minimum new module set under `src/structural_core/` and the boundary between the new core and legacy compatibility code.
+- [Architect] Lock the minimum SQLite schema: files, manifest, symbols, imports, edges, and refresh runs.
+- [SeniorDev] Build the new structural store and manifest planner without depending on LanceDB for structural refresh decisions.
+- [SeniorDev] Rebuild exact structural linking against the new SQLite authority using only exact symbol and import resolution.
+- [Dev] Add bootstrap tests for schema creation, manifest diffs, exact symbol persistence, and edge persistence.
 
-## Phase 5: Agent-Facing Tooling
+## Phase 5: Structural-Only Cutover
+- [Architect] Lock the branch cutover so the default runtime abandons the legacy semantic/vector/graph core.
+- [SeniorDev] Move default refresh orchestration onto the new structural core with no Ollama, LanceDB, or knowledge-graph work in the hot path.
+- [SeniorDev] Port `get_stats` onto structural-core facts only.
+- [Dev] Add regression coverage proving the new refresh path preserves include and exclude semantics and file removal handling.
+- [Dev] Update public-tool tests so disabled legacy wrappers fail clearly instead of silently using the old runtime.
+
+## Phase 6: Agent-Facing Tooling Rebuild
 - [Architect] Finalize the `inspect_symbol` and `impact_analysis` contracts with explicit inputs, outputs, confidence semantics, and evidence fields.
-- [SeniorDev] Implement `inspect_symbol` as the preferred agent-facing wrapper over definition and reference inspection.
-- [SeniorDev] Implement `impact_analysis` using graph edges, dependencies, related-test heuristics, and chunk metadata.
+- [SeniorDev] Implement `inspect_symbol` directly on structural-core facts.
+- [SeniorDev] Implement `impact_analysis` on structural-core edges and imports.
 - [SeniorDev] Keep output explainable by attaching reasons and evidence for every affected file, symbol, or test candidate.
 - [Dev] Add end-to-end tests and benchmark scenarios showing the new tools provide better first-pass guidance than raw search alone.
 
-## Phase 6: Scoped Rich Enrichment
-- [Architect] Finalize the `enrich_analysis` contract, analyzer taxonomy, and separation between exact facts and inferred facts.
-- [SeniorDev] Implement scoped enrichment for targeted analyzers such as decorators, middleware, dependency injection, route registration, and test impact.
-- [SeniorDev] Keep rich analysis path-centered and neighborhood-aware instead of whole-repository by default.
-- [Dev] Add regression coverage proving deep framework analysis is opt-in and does not block structural refresh.
+## Phase 7: Optional Rich Enrichment
+- [Architect] Revisit whether `enrich_analysis` is still worth building after the structural-only core proves itself.
+- [SeniorDev] Implement scoped enrichment only if the structural core has already passed the reboot decision gate.
+- [Dev] Add regression coverage proving deep framework analysis remains opt-in and outside the default structural refresh path.
 
-## Phase 7: Validation And Decision
+## Phase 8: Validation And Decision
 - [SeniorDev] Re-run benchmarks on `selos` and compare full refresh, partial refresh, and trust-recovery behavior against baseline.
 - [SeniorDev] Perform an explicit security reasoning pass over the new invalidation, manifest, storage-split, and impact-analysis logic before merge consideration.
 - [Architect] Summarize the branch outcome as one of: continue investment, keep as a narrow internal tool, or stop the pivot.

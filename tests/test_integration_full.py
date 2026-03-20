@@ -2,14 +2,13 @@ import pytest
 import os
 import sys
 import shutil
-import asyncio
-from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import patch
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.server import refresh_index, search_code, get_stats
-from src.config import EMBEDDING_DIMENSIONS
+from src.structural_core.refresh import StructuralRefresher
+from src.structural_core.store import StructuralStore
 
 
 @pytest.fixture
@@ -44,46 +43,105 @@ def add(a, b):
 
 @pytest.mark.asyncio
 async def test_end_to_end_flow(dummy_project, tmp_path):
-    temp_db_uri = tmp_path / "integration_lancedb"
+    structural_db_path = tmp_path / "integration_structural.sqlite"
 
-    from src.storage import VectorStore
-    real_store = VectorStore(uri=str(temp_db_uri))
+    structural_store = StructuralStore(str(structural_db_path))
+    structural_refresher = StructuralRefresher(structural_store, __import__("src.context", fromlist=["_context"])._context.parser)
 
-    async def mock_get_embedding(text):
-        return [float(len(text))] * EMBEDDING_DIMENSIONS
-
-    async def mock_get_embeddings_batch(texts, **kwargs):
-        return [[float(len(t))] * EMBEDDING_DIMENSIONS for t in texts]
-
-    with patch("src.context._context.vector_store", real_store), \
-         patch("src.context._context.ollama") as mock_ollama:
-
-        mock_ollama.get_embedding = AsyncMock(side_effect=mock_get_embedding)
-        mock_ollama.get_embeddings_batch = AsyncMock(side_effect=mock_get_embeddings_batch)
+    with patch("src.context._context.structural_store", structural_store), \
+         patch("src.context._context.structural_refresher", structural_refresher):
 
         # 1. Run Refresh Index
         refresh_result = await refresh_index.fn(root_path=str(dummy_project))
         assert "Indexing Complete" in refresh_result
         assert "Files Scanned: 3" in refresh_result
+        assert "Tracked Files: 3" in refresh_result
+        assert "Elapsed Time:" in refresh_result
 
-        # 2. Run Search Code
+        # 2. Disabled legacy wrappers fail clearly
         search_result = await search_code.fn(query="hello", root_path=str(dummy_project))
-        assert "main.py" in search_result
-        assert "def hello():" in search_result
+        assert "disabled on feature/structural-context-pivot" in search_result
 
         # 3. Get Stats
         stats_result = await get_stats.fn(root_path=str(dummy_project))
-        assert "Total Chunks:" in stats_result
-        assert "Unique Files:     3" in stats_result
-        assert "python: " in stats_result
+        assert "Tracked Files:    3" in stats_result
+        assert "Indexed Symbols:" in stats_result
+        assert "Project Pulse:" in stats_result
 
         # 4. Incremental update check
         (dummy_project / "new.py").write_text("def extra(): pass")
         refresh_result_inc = await refresh_index.fn(root_path=str(dummy_project))
-        assert "Incremental Update" in refresh_result_inc
+        assert "Incremental Structural Update" in refresh_result_inc
         assert "Files Scanned: 4 (3 skipped)" in refresh_result_inc
+        assert "Tracked Files: 4" in refresh_result_inc
+        assert "Elapsed Time:" in refresh_result_inc
 
-        # 5. Search for the new symbol
-        search_result_new = await search_code.fn(query="extra", root_path=str(dummy_project))
-        assert "new.py" in search_result_new
-        assert "def extra()" in search_result_new
+
+@pytest.mark.asyncio
+async def test_no_change_incremental_skips_rehashing(dummy_project, tmp_path):
+    structural_db_path = tmp_path / "manifest_structural.sqlite"
+
+    structural_store = StructuralStore(str(structural_db_path))
+    structural_refresher = StructuralRefresher(structural_store, __import__("src.context", fromlist=["_context"])._context.parser)
+
+    with patch("src.context._context.structural_store", structural_store), \
+         patch("src.context._context.structural_refresher", structural_refresher):
+
+        await refresh_index.fn(root_path=str(dummy_project), force_full_scan=True)
+
+        with patch("src.indexer._hash_file", side_effect=AssertionError("unchanged files should not be rehashed")):
+            refresh_result = await refresh_index.fn(root_path=str(dummy_project), force_full_scan=False)
+
+        assert "All 3 files unchanged" in refresh_result
+        assert "Tracked Files: 3" in refresh_result
+        assert "Elapsed Time:" in refresh_result
+
+
+@pytest.mark.asyncio
+async def test_incremental_hashes_only_changed_files(dummy_project, tmp_path):
+    structural_db_path = tmp_path / "manifest_changed_structural.sqlite"
+
+    structural_store = StructuralStore(str(structural_db_path))
+    structural_refresher = StructuralRefresher(structural_store, __import__("src.context", fromlist=["_context"])._context.parser)
+
+    with patch("src.context._context.structural_store", structural_store), \
+         patch("src.context._context.structural_refresher", structural_refresher):
+
+        await refresh_index.fn(root_path=str(dummy_project), force_full_scan=True)
+
+        (dummy_project / "utils.py").write_text("""
+def add(a, b):
+    result = a + b
+    return result
+""")
+
+        with patch("src.indexer._hash_file", side_effect=AssertionError("structural refresh should not hash files")) as mock_hash:
+            refresh_result = await refresh_index.fn(root_path=str(dummy_project), force_full_scan=False)
+
+        mock_hash.assert_not_called()
+        assert "Files Scanned: 3 (2 skipped)" in refresh_result
+        assert "Files Changed: 1" in refresh_result
+        assert "Elapsed Time:" in refresh_result
+
+
+@pytest.mark.asyncio
+async def test_refresh_index_persists_structural_core_state(dummy_project, tmp_path):
+    structural_db_path = tmp_path / "structural_state.sqlite"
+
+    structural_store = StructuralStore(str(structural_db_path))
+    structural_refresher = StructuralRefresher(structural_store, __import__("src.context", fromlist=["_context"])._context.parser)
+
+    with patch("src.context._context.structural_store", structural_store), \
+         patch("src.context._context.structural_refresher", structural_refresher):
+
+        await refresh_index.fn(root_path=str(dummy_project), force_full_scan=True)
+
+        symbols = structural_store.list_symbols(str(dummy_project))
+        imports = structural_store.list_imports(str(dummy_project), str(dummy_project / "main.py"))
+        refresh_run = structural_store.get_refresh_run(str(dummy_project))
+
+        assert any(symbol.symbol_name == "hello" for symbol in symbols)
+        assert any(symbol.symbol_name == "Greeter" for symbol in symbols)
+        assert imports == []
+        assert refresh_run is not None
+        assert refresh_run.scan_type == "full"

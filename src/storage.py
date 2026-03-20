@@ -7,7 +7,7 @@ import json
 import threading
 from collections import Counter
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pathlib import Path
 from .config import LANCEDB_URI, TABLE_NAME, EMBEDDING_DIMENSIONS
 from .models import CodeChunk
@@ -47,29 +47,31 @@ class VectorStore:
         path_hash = hashlib.sha256(normalized_root.encode('utf-8')).hexdigest()[:32]
         return f"metadata_{path_hash}"
 
-    def _get_table_or_none(self, project_root: str):
-        """Helper to safely fetch a table or None if it doesn't exist."""
-        table_name = self._get_table_name(project_root)
-        
+    def _get_manifest_table_name(self, project_root: str) -> str:
+        """Generates a stable, unique table name for per-file manifest state."""
+        normalized_root = normalize_path(project_root)
+        path_hash = hashlib.sha256(normalized_root.encode('utf-8')).hexdigest()[:32]
+        return f"manifest_{path_hash}"
+
+    def _table_exists(self, table_name: str) -> bool:
+        """Checks table existence while tolerating older LanceDB interfaces."""
+        try:
+            return table_name in self.db.list_tables()
+        except Exception:
+            try:
+                return table_name in self.db.table_names()
+            except Exception:
+                return False
+
+    def _get_cached_table_or_none(self, table_name: str):
+        """Returns an opened cached table if it exists."""
         with self._lock:
-            # Check cache first
             if table_name in self._tables:
                 return self._tables[table_name]
-    
-            # Robustly check for table existence
-            try:
-                all_tables = self.db.list_tables()
-                if table_name not in all_tables:
-                    # Final fallback check
-                    if table_name not in self.db.table_names():
-                        return None
-            except Exception:
-                try:
-                    if table_name not in self.db.table_names():
-                        return None
-                except:
-                    return None
-                    
+
+            if not self._table_exists(table_name):
+                return None
+
             try:
                 table = self.db.open_table(table_name)
                 self._tables[table_name] = table
@@ -77,16 +79,23 @@ class VectorStore:
             except Exception:
                 return None
 
-    def _ensure_table(self, table_name: str):
+    def _get_table_or_none(self, project_root: str):
+        """Helper to safely fetch a table or None if it doesn't exist."""
+        return self._get_cached_table_or_none(self._get_table_name(project_root))
+
+    def _get_manifest_table_or_none(self, project_root: str):
+        """Returns the file-manifest table for a project if it exists."""
+        return self._get_cached_table_or_none(self._get_manifest_table_name(project_root))
+
+    def _ensure_table(self, table_name: str, schema=None):
         """Creates the table if it doesn't exist."""
         with self._lock:
             if table_name in self._tables:
                 return self._tables[table_name]
                 
             try:
-                all_tables = self.db.list_tables()
-                if table_name not in all_tables:
-                    self.db.create_table(table_name, schema=self._get_schema())
+                if not self._table_exists(table_name):
+                    self.db.create_table(table_name, schema=schema or self._get_schema())
             except Exception as e:
                 # If it already exists, just ignore and open it
                 if "already exists" not in str(e).lower():
@@ -127,6 +136,31 @@ class VectorStore:
             pa.field("content_hash", pa.string()),
             pa.field("vector", pa.list_(pa.float32(), self.embedding_dims)),
         ])
+
+    def _get_manifest_schema(self):
+        """Returns the schema for per-file manifest entries."""
+        return pa.schema([
+            pa.field("filename", pa.string()),
+            pa.field("size", pa.int64()),
+            pa.field("mtime_ns", pa.int64()),
+            pa.field("content_hash", pa.string()),
+        ])
+
+    def _drop_table(self, table_name: str):
+        """Drops a table if it exists and clears its cached handle."""
+        try:
+            self._tables.pop(table_name, None)
+
+            try:
+                table = self.db.open_table(table_name)
+                table.delete("1=1")
+            except Exception:
+                pass
+
+            if self._table_exists(table_name):
+                self.db.drop_table(table_name)
+        except Exception as e:
+            logger.warning(f"Failed to drop table {table_name}: {e}")
 
 
     def upsert_chunks(self, project_root: str, chunks: List[CodeChunk], vectors: List[List[float]]):
@@ -248,24 +282,26 @@ class VectorStore:
 
     def clear_project(self, project_root: str):
         """Wipes the database table for a specific project."""
-        table_name = self._get_table_name(project_root)
+        table_names = [
+            self._get_table_name(project_root),
+            self._get_manifest_table_name(project_root),
+            self._get_metadata_table_name(project_root),
+        ]
         try:
-            # Pop Handle first to prevent stale writes/caching.
-            self._tables.pop(table_name, None)
-            
-            # Use delete("1=1") first to be safe, then try to drop.
-            # In some environments drop_table might be soft or delayed.
-            try:
-                table = self.db.open_table(table_name)
-                table.delete("1=1")
-            except:
-                pass
-                
-            all_tables = self.db.list_tables()
-            if table_name in all_tables:
-                self.db.drop_table(table_name)
+            for table_name in table_names:
+                self._drop_table(table_name)
         except Exception as e:
             logger.warning(f"Failed to clear project {project_root}: {e}")
+
+    def delete_chunks_for_files(self, project_root: str, filepaths: List[str]):
+        """Deletes all chunks for the provided files in a project table."""
+        table = self._get_table_or_none(project_root)
+        if table is None or not filepaths:
+            return
+
+        for path in set(filepaths):
+            safe_path = _sanitize_filter_value(normalize_path(path))
+            table.delete(f'filename = "{safe_path}"')
 
     def count_chunks(self, project_root: str) -> int:
         """Returns the total number of chunks for a project."""
@@ -279,7 +315,7 @@ class VectorStore:
         """Retrieves the index metadata for a project."""
         table_name = self._get_metadata_table_name(project_root)
         try:
-            if table_name not in self.db.table_names():
+            if not self._table_exists(table_name):
                 return None
             table = self.db.open_table(table_name)
             data = table.search().limit(1).to_list()
@@ -292,8 +328,8 @@ class VectorStore:
         """Saves the index metadata for a project."""
         table_name = self._get_metadata_table_name(project_root)
         try:
-            if table_name in self.db.table_names():
-                self.db.drop_table(table_name)
+            if self._table_exists(table_name):
+                self._drop_table(table_name)
                 
             schema = pa.schema([
                 pa.field("indexed_at", pa.string()),
@@ -308,6 +344,71 @@ class VectorStore:
             table.add([metadata])
         except Exception as e:
             logger.error(f"Failed to save index metadata: {e}")
+
+    def get_file_manifest(self, project_root: str) -> Dict[str, dict]:
+        """Returns a mapping of filename to lightweight file-state metadata."""
+        table = self._get_manifest_table_or_none(project_root)
+        if table is None:
+            return {}
+
+        try:
+            data = table.search().select(["filename", "size", "mtime_ns", "content_hash"]).to_arrow()
+            if len(data) == 0:
+                return {}
+
+            filenames = data.column("filename").to_pylist()
+            sizes = data.column("size").to_pylist()
+            mtimes = data.column("mtime_ns").to_pylist()
+            hashes = data.column("content_hash").to_pylist()
+
+            return {
+                filename: {
+                    "size": int(size or 0),
+                    "mtime_ns": int(mtime or 0),
+                    "content_hash": content_hash or "",
+                }
+                for filename, size, mtime, content_hash in zip(filenames, sizes, mtimes, hashes)
+                if filename
+            }
+        except Exception as e:
+            logger.warning(f"Failed to get file manifest: {e}")
+            return {}
+
+    def save_file_manifest_entries(self, project_root: str, entries: List[dict]):
+        """Upserts per-file manifest entries for a project."""
+        if not entries:
+            return
+
+        table_name = self._get_manifest_table_name(project_root)
+        table = self._ensure_table(table_name, self._get_manifest_schema())
+
+        filenames = []
+        rows = []
+        for entry in entries:
+            filename = normalize_path(entry["filename"])
+            filenames.append(filename)
+            rows.append({
+                "filename": filename,
+                "size": int(entry.get("size") or 0),
+                "mtime_ns": int(entry.get("mtime_ns") or 0),
+                "content_hash": entry.get("content_hash") or "",
+            })
+
+        for filename in set(filenames):
+            safe_path = _sanitize_filter_value(filename)
+            table.delete(f'filename = "{safe_path}"')
+
+        table.add(rows)
+
+    def delete_manifest_entries(self, project_root: str, filepaths: List[str]):
+        """Deletes manifest entries for the provided files."""
+        table = self._get_manifest_table_or_none(project_root)
+        if table is None or not filepaths:
+            return
+
+        for path in set(filepaths):
+            safe_path = _sanitize_filter_value(normalize_path(path))
+            table.delete(f'filename = "{safe_path}"')
 
     def get_project_hashes(self, project_root: str) -> dict:
         """Returns a mapping of {filename: content_hash}."""

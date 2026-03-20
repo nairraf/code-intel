@@ -27,6 +27,7 @@ Agents already have strong direct navigation tools such as file search, targeted
 3. Graph state must stay trustworthy during common refactors.
 4. Embeddings are enrichment, not the foundation of correctness.
 5. The branch succeeds only if benchmarked agent usefulness improves.
+6. When the legacy path fights the reboot thesis, rebuild the hot path instead of continuing in-place reduction.
 
 ## Branch Scope
 
@@ -77,46 +78,60 @@ The preferred architecture and technology direction are documented in `docs/arch
 	- [x] reboot benchmark protocol captured
 
 ### Milestone R1: Graph Freshness
-- **Status:** Not started
+- **Status:** In progress
 - **Goal:** make incremental graph state trustworthy.
 - **Deliverables:**
-	- [ ] project-scoped graph ownership
-	- [ ] stale edge invalidation for changed files
-	- [ ] removal handling for deleted and moved files
-	- [ ] regression tests for rename, move, delete, and symbol split cases
+	- [x] project-scoped graph ownership
+	- [x] stale edge invalidation for changed files
+	- [x] removal handling for deleted and moved files
+	- [x] regression tests for rename, move, delete, and symbol split cases
+	- [ ] benchmark validation on `selos`
+	- [ ] wider multi-file refactor validation
 
 ### Milestone R2: Cheap Incremental Refresh
-- **Status:** Not started
+- **Status:** In progress
 - **Goal:** remove the current whole-tree cost profile from partial refresh.
 - **Deliverables:**
-	- [ ] manifest-based or diff-aware change detection
-	- [ ] unchanged refresh path that avoids rehashing every candidate file
+	- [x] manifest-based change detection using file metadata before hashing
+	- [x] unchanged refresh path that avoids rehashing every candidate file
 	- [ ] filtered refresh behavior preserved
 	- [ ] benchmark comparison on `selos`
+	- [ ] further reduction of fixed incremental overhead beyond hashing
+
+### Milestone R2.5: Parallel Structural Core Rebuild
+- **Status:** In progress
+- **Goal:** replace the legacy refresh engine as the primary implementation path with a smaller structural core built for the reboot thesis.
+- **Deliverables:**
+	- [x] minimum SQLite schema defined for files, manifest, symbols, imports, edges, and refresh runs
+	- [x] new `src/structural_core/` package scaffolded
+	- [x] exact symbol and import persistence built against the new store
+	- [x] `refresh_index` cutover approved as structural-only by default
+	- [x] default refresh execution ported onto the new core with no legacy runtime work in the hot path
+	- [x] structural `get_stats` ported onto the new core
+	- [x] exact structural linking built without LanceDB as the structural authority
 
 ### Milestone R3: Structural-First Indexing
 - **Status:** Not started
-- **Goal:** remove embeddings from the blocking correctness path.
+- **Goal:** finish the new-core tool surface on top of the structural-only runtime.
 - **Deliverables:**
-	- [ ] structural indexing completes without waiting on embeddings
-	- [ ] deferred or background embedding enrichment
-	- [ ] degraded-but-useful behavior when embedding infrastructure is unavailable
+	- [ ] structural indexing completes without any dependency on embeddings in the default path
 	- [ ] `get_index_status` implemented for trust and freshness visibility
-	- [ ] regression coverage for slow and unavailable embedding scenarios
+	- [ ] `inspect_symbol` implemented on the structural core
+	- [ ] regression coverage for structural-only operation
 
 ### Milestone R4: Agent-Facing Tooling
-- **Status:** Not started
+- **Status:** In progress
 - **Goal:** add the first reboot-native agent tools with clear value.
 - **Deliverables:**
-	- [ ] `inspect_symbol` contract and implementation
-	- [ ] `impact_analysis` contract finalized
-	- [ ] `impact_analysis` implementation
-	- [ ] explainable output with reasons and confidence labels
-	- [ ] test impact candidates included in the analysis output
+	- [x] `inspect_symbol` contract and implementation
+	- [x] `impact_analysis` contract finalized
+	- [x] `impact_analysis` implementation
+	- [x] explainable output with reasons and confidence labels
+	- [x] test impact candidates included in the analysis output
 
 ### Milestone R5: Scoped Rich Enrichment
 - **Status:** Not started
-- **Goal:** keep expensive framework-aware analysis useful without putting it in the default refresh path.
+- **Goal:** revisit optional enrichment only after the structural-only core proves its value.
 - **Deliverables:**
 	- [ ] `enrich_analysis` contract and implementation
 	- [ ] analyzer taxonomy for decorators, middleware, dependency injection, route registration, and test impact
@@ -156,11 +171,12 @@ The working reboot plan is maintained in `docs/architecture/IMPLEMENTATION_PLAN-
 ## Execution Order
 
 1. complete Milestone R0 baseline and benchmark setup
-2. execute R1 and R2 before any new feature expansion
-3. execute R3 before treating semantic search as a core promise
-4. execute R4 only after structural freshness is credible
-5. execute R5 only as scoped opt-in enrichment
-6. use R6 to decide whether the project continues in this new form
+2. execute R1 and the smallest useful part of R2 to prove current-path assumptions
+3. move immediately into R2.5 parallel structural core rebuild
+4. execute R3 only after the new structural core owns refresh and stats
+5. execute R4 only after structural freshness is credible on the new core
+6. execute R5 only as scoped opt-in enrichment
+7. use R6 to decide whether the project continues in this new form
 
 ## Benchmark Reference
 

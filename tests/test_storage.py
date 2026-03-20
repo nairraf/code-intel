@@ -11,6 +11,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.storage import VectorStore
 from src.models import CodeChunk
 from src.config import EMBEDDING_DIMENSIONS
+from src.utils import normalize_path
 
 
 @pytest.fixture
@@ -132,3 +133,45 @@ def test_clear_project(temp_store):
     
     temp_store.clear_project(project)
     assert temp_store.count_chunks(project) == 0
+
+def test_file_manifest_round_trip(temp_store):
+    project = "manifest_project"
+    main_path = normalize_path("src/main.py")
+    utils_path = normalize_path("src/utils.py")
+    temp_store.save_file_manifest_entries(project, [
+        {
+            "filename": main_path,
+            "size": 123,
+            "mtime_ns": 456,
+            "content_hash": "abc",
+        },
+        {
+            "filename": utils_path,
+            "size": 789,
+            "mtime_ns": 101112,
+            "content_hash": "def",
+        },
+    ])
+
+    manifest = temp_store.get_file_manifest(project)
+
+    assert manifest[main_path]["size"] == 123
+    assert manifest[main_path]["mtime_ns"] == 456
+    assert manifest[main_path]["content_hash"] == "abc"
+    assert manifest[utils_path]["content_hash"] == "def"
+
+def test_delete_manifest_entries(temp_store):
+    project = "manifest_delete_project"
+    main_path = normalize_path("src/main.py")
+    temp_store.save_file_manifest_entries(project, [
+        {
+            "filename": main_path,
+            "size": 123,
+            "mtime_ns": 456,
+            "content_hash": "abc",
+        }
+    ])
+
+    temp_store.delete_manifest_entries(project, [main_path])
+
+    assert temp_store.get_file_manifest(project) == {}

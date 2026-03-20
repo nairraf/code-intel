@@ -1,8 +1,6 @@
 import sys
 import logging
-import asyncio
 import builtins
-import traceback
 from typing import Optional
 
 from fastmcp import FastMCP
@@ -22,9 +20,8 @@ from .config import LOG_DIR
 from .utils import normalize_path
 from .context import get_context
 from .indexer import refresh_index_impl
-from .tools.definition import find_definition_impl
-from .tools.references import find_references_impl
-from .tools.search import search_code_impl
+from .tools.inspect import inspect_symbol_impl
+from .tools.impact import impact_analysis_impl
 from .tools.stats import get_stats_impl
 
 # ---------------------------------------------------------------------------
@@ -44,11 +41,6 @@ logger = logging.getLogger("server")
 # MCP instance + shared services
 # ---------------------------------------------------------------------------
 mcp = FastMCP("Lightweight Code Intel")
-
-# Concurrency guards
-INFERENCE_SEMAPHORE = asyncio.Semaphore(5)
-FILE_PROCESSING_SEMAPHORE = asyncio.Semaphore(10)
-
 
 def _get_ctx():
     """Return the shared AppContext, lazily initialised on first call.
@@ -86,8 +78,14 @@ async def refresh_index(
     return await refresh_index_impl(
         norm_root, force_full_scan, include, exclude,
         ctx=_get_ctx(),
-        inference_semaphore=INFERENCE_SEMAPHORE,
-        file_semaphore=FILE_PROCESSING_SEMAPHORE,
+    )
+
+
+def _disabled_legacy_tool_message(tool_name: str) -> str:
+    return (
+        f"{tool_name} is disabled on feature/structural-context-pivot. "
+        "This branch is testing a structural-only foundation. "
+        "Use refresh_index and get_stats until reboot-native replacements are rebuilt on the new core."
     )
 
 
@@ -99,20 +97,7 @@ async def search_code(
     include: str = None,
     exclude: str = None,
 ) -> str:
-    """
-    Semantic (vector-based) search over the codebase.
-
-    Best for: Finding code related to a concept or locating similar implementations.
-
-    Args:
-        query: Natural language description of what you are looking for.
-        root_path: MUST be the absolute path to the active workspace project root. NEVER use '.' or relative paths.
-        limit: Max results to return (recommended: 10-20).
-        include: Glob filter for files to search within (e.g., 'src/**').
-        exclude: Glob filter for files to ignore.
-    """
-    norm_root = normalize_path(root_path)
-    return await search_code_impl(query, _get_ctx(), norm_root, limit, include, exclude)
+    return _disabled_legacy_tool_message("search_code")
 
 
 @mcp.tool()
@@ -130,41 +115,63 @@ async def get_stats(root_path: str) -> str:
 
 
 @mcp.tool()
+async def inspect_symbol(
+    root_path: str,
+    symbol_name: str,
+    filename: str = None,
+    line: int = None,
+    include_references: bool = True,
+    include_dependents: bool = False,
+    max_references: int = 50,
+) -> dict:
+    norm_root = normalize_path(root_path)
+    norm_file = normalize_path(filename) if filename else None
+    return await inspect_symbol_impl(
+        norm_root,
+        symbol_name,
+        _get_ctx(),
+        filename=norm_file,
+        line=line,
+        include_references=include_references,
+        include_dependents=include_dependents,
+        max_references=max_references,
+    )
+
+
+@mcp.tool()
+async def impact_analysis(
+    root_path: str,
+    changed_files: list[str] = None,
+    changed_symbols: list[str] = None,
+    patch_text: str = None,
+    include_tests: bool = True,
+    max_results: int = 50,
+) -> dict:
+    norm_root = normalize_path(root_path)
+    return await impact_analysis_impl(
+        norm_root,
+        _get_ctx(),
+        changed_files=changed_files,
+        changed_symbols=changed_symbols,
+        patch_text=patch_text,
+        include_tests=include_tests,
+        max_results=max_results,
+    )
+
+
+@mcp.tool()
 async def find_definition(
     filename: str,
     line: int,
     symbol_name: Optional[str],
     root_path: str,
 ) -> str:
-    """
-    Locates the source code definition for a specific symbol used in a file.
-
-    Best for: 'Jump to Definition' to understand implementation details or resolve imports.
-
-    Args:
-        filename: Absolute path to the file where the symbol is used.
-        line: The line number where the symbol is referenced (1-indexed).
-        symbol_name: The exact name of the function, class, or variable.
-        root_path: MUST be the absolute path to the active workspace project root. NEVER use '.' or relative paths.
-    """
-    norm_root = normalize_path(root_path)
-    norm_file = normalize_path(filename)
-    return await find_definition_impl(norm_file, line, symbol_name, norm_root, _get_ctx())
+    return _disabled_legacy_tool_message("find_definition")
 
 
 @mcp.tool()
 async def find_references(symbol_name: str, root_path: str) -> str:
-    """
-    Finds all locations where a specific symbol is used or called.
-
-    Best for: Assessing refactoring impact or finding usage examples of a shared utility.
-
-    Args:
-        symbol_name: The exact name of the symbol to track.
-        root_path: MUST be the absolute path to the active workspace project root. NEVER use '.' or relative paths.
-    """
-    norm_root = normalize_path(root_path)
-    return await find_references_impl(symbol_name, norm_root, _get_ctx())
+    return _disabled_legacy_tool_message("find_references")
 
 
 if __name__ == "__main__":

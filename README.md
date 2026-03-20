@@ -56,48 +56,46 @@ The immediate implementation plan is tracked in [docs/architecture/IMPLEMENTATIO
 
 ## Planned Capabilities
 
-The reboot centers on four capabilities:
+The reboot now centers on a smaller core:
 
-1. structural-first indexing
+1. structural-only refresh
 2. cheap incremental refresh
-3. trustworthy graph invalidation
-4. agent-facing impact analysis
-
-Semantic search still matters, but it becomes enrichment rather than the foundation of the product promise.
+3. exact symbol and import persistence
+4. structural stats and trust reporting
+5. later rebuild of agent-facing inspection and impact analysis on the new core
 
 ## Technical Direction
 
-The reboot keeps and reuses the existing investment in:
+The reboot keeps and reuses only the pieces that still align with the thesis:
 
 - Tree-sitter parsing
-- chunked code representation
-- graph-based cross-file intelligence
 - MCP-based tool delivery
-- many existing parser, resolver, and stats concepts
+- exact structural persistence in SQLite
 
-The reboot also changes the architecture boundary in two important ways:
+The branch no longer treats embeddings, LanceDB, or the legacy graph runtime as part of the default architecture.
 
-- structural state should become authoritative independently of embeddings
-- vector and rich framework analysis should become optional enrichment layers
+The new boundary is stricter:
+
+- structural state is the only default runtime authority
+- semantic retrieval is not part of the reboot foundation
+- disabled legacy tools stay out of the default hot path until rebuilt on the new core
 
 The preferred architecture and technology direction for the reboot are documented in [docs/architecture/REBOOT_ARCHITECTURE.md](docs/architecture/REBOOT_ARCHITECTURE.md).
 
 ## Preferred Tool Surface
 
-The preferred agent-facing tool surface for the reboot is:
+The active tool surface for this branch is now intentionally narrow:
 
 - `refresh_index`
-- `get_index_status`
 - `get_stats`
-- `inspect_symbol`
-- `impact_analysis`
-- `enrich_analysis`
 
-Secondary and compatibility tools remain available as needed:
+The following tools are disabled on this branch until they are rebuilt on the new structural core:
 
 - `search_code`
 - `find_definition`
 - `find_references`
+
+Future reboot-native tools such as `inspect_symbol`, `impact_analysis`, and `get_index_status` will only be added after they are implemented directly on the new structural core.
 
 The detailed contracts are defined in [docs/architecture/API_CONTRACT-core.md](docs/architecture/API_CONTRACT-core.md).
 
@@ -111,23 +109,13 @@ cd code-intel
 uv sync
 ```
 
-### 2. Optional embedding backend
-
-If you want semantic search and embedding-backed enrichment, install Ollama and pull the configured embedding model.
-
-```bash
-ollama pull unclemusclez/jina-embeddings-v2-base-code
-```
-
-The reboot direction assumes the server should still provide useful structural answers even when Ollama is unavailable.
-
-### 3. Run the MCP server
+### 2. Run the MCP server
 
 ```bash
 uv run python -m src.server
 ```
 
-### 4. Example MCP configuration
+### 3. Example MCP configuration
 
 ```json
 {
@@ -146,10 +134,10 @@ uv run python -m src.server
 This branch is in reboot mode.
 
 - branch of record: `feature/structural-context-pivot`
-- current phase: planning and baseline alignment
-- next implementation target: graph freshness, cheap incremental refresh, and structural-first indexing
+- current phase: structural-only cutover
+- next implementation target: exact edge persistence, structural status reporting, and new-core agent tooling
 
-The previously existing system remains the implementation base, but roadmap and reporting are now being evaluated against the reboot criteria rather than the legacy retrieval-centric roadmap.
+The legacy runtime is no longer the implementation base for the default path on this branch. New work is expected to land on the structural core only.
 
 ## Repository Documents
 

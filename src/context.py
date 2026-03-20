@@ -19,26 +19,16 @@ Usage
 """
 
 from .parser import CodeParser
-from .embeddings import OllamaClient
-from .storage import VectorStore
-from .knowledge_graph import KnowledgeGraph
-from .linker import SymbolLinker
+from .structural_core.refresh import StructuralRefresher
+from .structural_core.store import StructuralStore
 
 
 class AppContext:
-    """Container for all shared singleton services."""
+  """Container for all shared singleton services."""
 
-    def __init__(self) -> None:
-        self.parser = CodeParser()
-        self.ollama = OllamaClient()
-        self.vector_store = VectorStore()
-        self.knowledge_graph = KnowledgeGraph()
-        self.linker = SymbolLinker(self.vector_store, self.knowledge_graph)
+  def __init__(self) -> None: self.parser = CodeParser(); self.structural_store = StructuralStore(); self.structural_refresher = StructuralRefresher(self.structural_store, self.parser); self.ollama = None; self.vector_store = None; self.knowledge_graph = None; self.linker = None
 
-    async def close(self) -> None:
-        """Release any resources held by services (e.g. HTTP connections)."""
-        await self.ollama.aclose()
-        self.knowledge_graph.close()
+  async def close(self) -> None: self.structural_store.close()
 
 
 # Module-level singleton — lazily initialised on first call to get_context().

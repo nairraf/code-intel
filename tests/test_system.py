@@ -2,9 +2,9 @@ import pytest
 import os
 import shutil
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import patch
 from src.server import refresh_index, search_code
-from src.config import EMBEDDING_DIMENSIONS
+from src.structural_core.models import StructuralRefreshResult
 
 
 @pytest.mark.asyncio
@@ -14,17 +14,29 @@ async def test_refresh_index_flow(mocker):
     (project_root / "file1.py").write_text("def test(): pass")
 
     try:
-        mock_vec_store = mocker.patch("src.context._context.vector_store")
-        mock_ollama = mocker.patch("src.context._context.ollama")
-        mocker.patch("src.indexer.batch_get_git_info", new_callable=AsyncMock, return_value={})
-
-        mock_ollama.get_embeddings_batch = AsyncMock(return_value=[[0.1] * EMBEDDING_DIMENSIONS])
+        mock_structural_refresher = mocker.patch("src.context._context.structural_refresher")
+        mock_structural_store = mocker.patch("src.context._context.structural_store")
+        mock_structural_refresher.refresh.return_value = StructuralRefreshResult(
+            project_root=str(project_root),
+            scan_type="incremental",
+            files_scanned=1,
+            files_changed=1,
+            files_skipped=0,
+            files_removed=0,
+            changed_files=(str(project_root / "file1.py"),),
+        )
+        mock_structural_store.get_project_stats.return_value = {
+            "tracked_files": 1,
+            "symbol_count": 1,
+            "import_count": 0,
+            "edge_count": 0,
+        }
 
         result = await refresh_index.fn(str(project_root))
 
         assert "Indexing Complete" in result
         assert "Files Scanned: 1" in result
-        mock_vec_store.upsert_chunks.assert_called()
+        assert "Tracked Files: 1" in result
     finally:
         if project_root.exists():
             shutil.rmtree(project_root)
@@ -32,35 +44,8 @@ async def test_refresh_index_flow(mocker):
 
 @pytest.mark.asyncio
 async def test_search_code_flow(mocker):
-    mock_vec_store = mocker.patch("src.context._context.vector_store")
-    mock_ollama = mocker.patch("src.context._context.ollama")
-
-    mock_ollama.get_embedding = AsyncMock(return_value=[0.1] * EMBEDDING_DIMENSIONS)
-
-    mock_vec_store.search.return_value = [
-        {
-            "filename": "test.py",
-            "start_line": 1,
-            "end_line": 5,
-            "type": "function_definition",
-            "content": "def mock_func(): pass",
-            "_distance": 0.05,
-            "symbol_name": "mock_func",
-            "parent_symbol": None,
-            "signature": "mock_func()",
-            "docstring": "A mock function.",
-            "decorators": None,
-            "last_modified": "2026-02-16 12:00:00",
-            "author": "Test Author",
-            "language": "python",
-        }
-    ]
     result = await search_code.fn("my query", root_path="fake_project")
-    assert "Results for project" in result
-    assert "test.py" in result
-    assert "mock_func" in result
-    assert "Author: Test Author" in result
-    assert "Date: 2026-02-16 12:00:00" in result
+    assert "search_code is disabled" in result
 
 
 @pytest.mark.asyncio

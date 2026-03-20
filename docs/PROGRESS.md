@@ -8,9 +8,9 @@
 
 ## Current Stage
 
-We are in reboot alignment.
+We are in structural-only foundation build-out.
 
-The project has not yet earned the new direction. The branch currently contains planning, contract, and documentation reset work so implementation can proceed against a clean baseline.
+The branch has now explicitly approved a default runtime that abandons the legacy semantic/vector/graph core. New work should land only on the structural core unless the reboot contract is revised.
 
 ## What Has Been Reset
 
@@ -47,16 +47,55 @@ The branch will be judged on whether it improves these practical outcomes:
   - [ ] baseline measurements captured
 
 ### Milestone R1: Graph Freshness
-- **Status:** Not started
+- **Status:** In progress
+- **Completed:**
+  - [x] project-scoped graph ownership added to stored edges
+  - [x] stale edge invalidation for changed files added
+  - [x] removal handling for deleted and moved files added
+  - [x] regression tests added for rename, move, delete, and chunk-id drift scenarios
+- **Remaining:**
+  - [ ] benchmark the new behavior on `selos`
+  - [ ] validate convergence further against larger multi-file refactors
 
 ### Milestone R2: Cheap Incremental Refresh
-- **Status:** Not started
+- **Status:** In progress
+- **Completed:**
+  - [x] manifest-based file-state persistence added
+  - [x] unchanged refresh path now uses `mtime_ns` and `size` before falling back to hashing
+  - [x] regression tests added proving unchanged incrementals skip whole-file rehashing
+  - [x] regression tests added proving one-file edits hash only changed files in the focused fixture
+- **Remaining:**
+  - [ ] preserve and validate filtered refresh behavior explicitly
+  - [ ] benchmark the new fast path on `selos`
+  - [ ] reduce additional fixed overhead beyond file hashing
+
+### Milestone R2.5: Parallel Structural Core Rebuild
+- **Status:** In progress
+- **Completed:**
+  - [x] branch direction reset toward a minimal parallel rebuild rather than further in-place stripping
+  - [x] minimum structural core schema defined
+  - [x] `src/structural_core/` scaffolded
+  - [x] exact symbol and import persistence added to the new core
+  - [x] basic structural refresh flow added for manifest diff, exact persistence, and file removal
+  - [x] structural-only cutover approved for the branch default runtime
+  - [x] default refresh no longer executes legacy semantic or graph work
+  - [x] `get_stats` now reads structural-core facts only
+  - [x] exact structural edges now persist in SQLite and relink unchanged callers after target changes
+- **Remaining:**
+  - [ ] port exact symbol inspection onto the new core
 
 ### Milestone R3: Structural-First Indexing
 - **Status:** Not started
 
 ### Milestone R4: Agent-Facing Tooling
-- **Status:** Not started
+- **Status:** In progress
+- **Completed:**
+  - [x] `inspect_symbol` implemented on structural-core definitions and incoming edges
+  - [x] `impact_analysis` implemented on structural-core symbols, edges, and tracked-file heuristics
+  - [x] explainable reasons and confidence labels returned for affected files, symbols, and candidate tests
+- **Remaining:**
+  - [ ] validate the new tool behavior through the live MCP surface
+  - [ ] benchmark whether the new tools are actually useful on real agent tasks
 
 ### Milestone R5: Scoped Rich Enrichment
 - **Status:** Not started
@@ -97,9 +136,9 @@ Interpretation:
 
 ## Immediate Next Steps
 
-- [ ] capture additional `selos` baseline timings for framework-heavy and full-rebuild cases
-- [ ] add failing stale-graph regression tests
-- [ ] start graph invalidation work
+- [ ] add exact edge persistence and exact symbol inspection to the new core
+- [ ] port exact symbol inspection onto the new core
+- [ ] use `selos` benchmarks only after the structural-only cutover lands
 
 ## Preferred Technical Direction
 

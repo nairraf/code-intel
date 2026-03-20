@@ -1,27 +1,27 @@
-"""
-indexer.py — Indexing orchestration for the code-intel MCP server.
-
-Provides:
-    _hash_file            : Compute SHA-256 digest of a file.
-    _should_process_file  : Scope-filter a file against include/exclude globs.
-    refresh_index_impl    : Two-pass indexing orchestrator (definitions → links).
-"""
+"""Structural refresh orchestration for the rebooted code-intel server."""
 
 import os
 import asyncio
 import hashlib
 import logging
+import time
 from pathlib import Path
 from typing import Optional
 
 from fnmatch import fnmatch
 
 from .config import IGNORE_DIRS, SUPPORTED_EXTENSIONS
-from .git_utils import batch_get_git_info, get_current_git_commit, check_git_dirty
 from .utils import normalize_path
 from .context import AppContext
 
 logger = logging.getLogger("server")
+
+
+def _format_elapsed_time(seconds: float) -> str:
+    """Format wall-clock runtime for user-facing refresh responses."""
+    if seconds < 1:
+        return f"{seconds * 1000:.0f} ms"
+    return f"{seconds:.2f} s"
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +39,18 @@ def _hash_file(filepath: str) -> str:
     except Exception as e:
         logger.error(f"Failed to hash file {filepath}: {e}")
         return ""
+
+
+def _get_file_state(filepath: str) -> Optional[dict]:
+    """Return lightweight file metadata used for manifest-based change detection."""
+    try:
+        stat_result = os.stat(filepath)
+        return {
+            "size": int(stat_result.st_size),
+            "mtime_ns": int(stat_result.st_mtime_ns),
+        }
+    except OSError:
+        return None
 
 
 def _should_process_file(
@@ -70,10 +82,6 @@ def _should_process_file(
     return True
 
 
-# ---------------------------------------------------------------------------
-# Two-pass indexing orchestrator
-# ---------------------------------------------------------------------------
-
 async def refresh_index_impl(
     root_path: str = ".",
     force_full_scan: bool = False,
@@ -83,7 +91,7 @@ async def refresh_index_impl(
     inference_semaphore: asyncio.Semaphore = None,
     file_semaphore: asyncio.Semaphore = None,
 ) -> str:
-    """Scan *root_path*, index definitions (Pass 1), then link usages (Pass 2).
+    """Scan *root_path* and persist structural facts into the new core.
 
     Args:
         root_path:          Absolute path to the project root.
@@ -91,31 +99,16 @@ async def refresh_index_impl(
         include:            Optional glob to ONLY index matching files.
         exclude:            Optional glob to SKIP matching files.
         ctx:                Shared service container (AppContext).
-        inference_semaphore: Limits concurrent embedding requests.
-        file_semaphore:     Limits concurrent file-processing coroutines.
+        inference_semaphore: Unused compatibility parameter.
+        file_semaphore:     Unused compatibility parameter.
     """
+    start_time = time.perf_counter()
     project_root_str = normalize_path(root_path)
     root = Path(project_root_str)
     if not root.exists():
         return f"Error: Path {root} does not exist."
 
-    if force_full_scan:
-        ctx.vector_store.clear_project(project_root_str)
-        ctx.knowledge_graph.clear()
-
-    initial_count = ctx.vector_store.count_chunks(project_root_str)
-    existing_hashes = {} if force_full_scan else ctx.vector_store.get_project_hashes(project_root_str)
-
-    stats = {
-        "files_scanned": 0,
-        "chunks_indexed": 0,
-        "errors": 0,
-        "initial_count": initial_count,
-        "skipped": 0,
-    }
-
-    files_to_process = []
-    files_to_skip = []
+    candidate_files = []
 
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS and not d.startswith(".")]
@@ -129,116 +122,45 @@ async def refresh_index_impl(
                 if not _should_process_file(file_str, project_root_str, include, exclude):
                     continue
 
-                current_hash = _hash_file(file_str)
-                stored_hash = existing_hashes.get(file_str)
+                candidate_files.append(file_str)
 
-                if not force_full_scan and stored_hash == current_hash:
-                    files_to_skip.append(file_str)
-                else:
-                    files_to_process.append((file_str, current_hash))
+    structural_result = ctx.structural_refresher.refresh(
+        project_root_str,
+        candidate_files,
+        force_full_scan=force_full_scan,
+        prune_missing_files=include is None and exclude is None,
+    )
 
-    if not files_to_process and not files_to_skip:
+    project_stats = ctx.structural_store.get_project_stats(project_root_str) or {
+        "tracked_files": 0,
+        "symbol_count": 0,
+        "import_count": 0,
+        "edge_count": 0,
+    }
+
+    if not candidate_files and structural_result.files_removed == 0 and project_stats["tracked_files"] == 0:
         return "No supported code files found matching your criteria."
 
-    stats["files_scanned"] = len(files_to_process) + len(files_to_skip)
-    stats["skipped"] = len(files_to_skip)
-
-    if not files_to_process:
+    if not structural_result.changed_files and not structural_result.removed_files:
+        elapsed = _format_elapsed_time(time.perf_counter() - start_time)
         return (
-            f"Indexing Complete (All {stats['skipped']} files unchanged).\n"
-            f"Total Chunks in Index: {initial_count}"
+            f"Indexing Complete (All {structural_result.files_skipped} files unchanged).\n"
+            f"Tracked Files: {project_stats['tracked_files']}\n"
+            f"Indexed Symbols: {project_stats['symbol_count']}\n"
+            f"Indexed Imports: {project_stats['import_count']}\n"
+            f"Elapsed Time: {elapsed}"
         )
 
-    just_filepaths = [f[0] for f in files_to_process]
-    git_info = await batch_get_git_info(just_filepaths, project_root_str)
-
-    parse_cache = {}
-
-    # --- Pass 1: Index definitions & generate embeddings ---
-    async def process_file_pass1(filepath: str, file_hash: str):
-        try:
-            chunks = ctx.parser.parse_file(filepath, project_root=project_root_str)
-            if not chunks:
-                return 0
-            
-            parse_cache[filepath] = chunks
-
-            file_git = git_info.get(filepath, {"author": None, "last_modified": None})
-            for chunk in chunks:
-                chunk.author = file_git.get("author")
-                chunk.last_modified = file_git.get("last_modified")
-                chunk.content_hash = file_hash
-
-            texts = [f"{c.language} {c.type} {c.symbol_name}: {c.content}" for c in chunks]
-            embeddings = await ctx.ollama.get_embeddings_batch(texts, semaphore=inference_semaphore)
-
-            if embeddings:
-                ctx.vector_store.upsert_chunks(project_root_str, chunks, embeddings)
-
-            return len(chunks)
-        except Exception as e:
-            logger.error(f"Pass 1 (Indexing) failed for {filepath}: {e}")
-            return 0
-
-    async def process_file_bounded_pass1(file_data):
-        filepath, file_hash = file_data
-        async with file_semaphore:
-            return await process_file_pass1(filepath, file_hash)
-
-    logger.info("Starting Pass 1: Indexing Definitions...")
-    tasks_p1 = [process_file_bounded_pass1(fd) for fd in files_to_process]
-    results_p1 = await asyncio.gather(*tasks_p1)
-    stats["chunks_indexed"] = sum(results_p1)
-
-    # --- Pass 2: Link usages ---
-    # All Pass 1 definitions must be committed before we resolve edges.
-    async def process_file_pass2(filepath: str):
-        try:
-            chunks = parse_cache.get(filepath)
-            if chunks is None:
-                chunks = ctx.parser.parse_file(filepath, project_root=project_root_str)
-                
-            if not chunks:
-                return
-            for chunk in chunks:
-                ctx.linker.link_chunk_usages(project_root_str, chunk)
-        except Exception as e:
-            logger.error(f"Pass 2 (Linking) failed for {filepath}: {e}")
-
-    async def process_file_bounded_pass2(file_data):
-        filepath, _ = file_data
-        async with file_semaphore:
-            await process_file_pass2(filepath)
-
-    logger.info("Starting Pass 2: Linking Usages...")
-    ctx.knowledge_graph.begin_transaction()
-    try:
-        tasks_p2 = [process_file_bounded_pass2(fd) for fd in files_to_process]
-        await asyncio.gather(*tasks_p2)
-        ctx.knowledge_graph.commit_transaction()
-    except Exception as e:
-        logger.error(f"Linking transaction failed: {e}")
-
-    try:
-        from datetime import datetime, timezone
-        commit = await get_current_git_commit(project_root_str)
-        is_dirty = await check_git_dirty(project_root_str)
-        metadata = {
-            "indexed_at": datetime.now(timezone.utc).isoformat(),
-            "commit_hash": commit,
-            "is_dirty": is_dirty,
-            "scan_type": "full" if force_full_scan else "incremental",
-            "model_name": ctx.ollama.model_name if hasattr(ctx.ollama, "model_name") else "unknown"
-        }
-        ctx.vector_store.save_index_metadata(project_root_str, metadata)
-    except Exception as e:
-        logger.error(f"Failed to persist index metadata: {e}")
-
-    final_count = ctx.vector_store.count_chunks(project_root_str)
-    scan_type = "Full Rebuild" if force_full_scan else "Incremental Update"
+    scan_type = "Full Structural Refresh" if force_full_scan else "Incremental Structural Update"
+    elapsed = _format_elapsed_time(time.perf_counter() - start_time)
     return (
         f"Indexing Complete for project: {project_root_str}\n"
         f"Scan Type: {scan_type}\n"
-        f"Files Scanned: {stats['files_scanned']} ({stats['skipped']} skipped)\n"
-        f"Total Chunks in Index: {final_count}"
+        f"Files Scanned: {structural_result.files_scanned} ({structural_result.files_skipped} skipped)\n"
+        f"Files Changed: {len(structural_result.changed_files)}\n"
+        f"Files Removed: {structural_result.files_removed}\n"
+        f"Tracked Files: {project_stats['tracked_files']}\n"
+        f"Indexed Symbols: {project_stats['symbol_count']}\n"
+        f"Indexed Imports: {project_stats['import_count']}\n"
+        f"Elapsed Time: {elapsed}"
     )

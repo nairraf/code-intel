@@ -97,18 +97,17 @@ Every response that depends on index state should support a freshness block shap
 
 ## Tool Taxonomy
 
-### Primary Agent-Facing Tools
+### Active Branch Tools
 - `refresh_index`
+- `get_stats`
+
+### Planned Rebuild Tools
 - `get_index_status`
 - `inspect_symbol`
-- `get_stats`
 - `impact_analysis`
-- `enrich_analysis`
 
-### Secondary Discovery Tool
+### Disabled Legacy Tools
 - `search_code`
-
-### Compatibility Tools
 - `find_definition`
 - `find_references`
 
@@ -130,10 +129,10 @@ async def refresh_index(
 
 #### Required Behavior
 - A structural refresh must complete even if embedding generation is slow or unavailable.
-- Full rebuilds may clear project-owned vector and graph state.
-- Incremental refresh must invalidate stale project-owned edges for changed, removed, or moved files before relinking.
+- Full rebuilds must clear structural-core state owned by the project.
 - Incremental refresh should prefer manifest or diff-aware detection over hashing every candidate file on every run.
 - `changed_files` is a caller hint, not an authority; the implementation may validate or expand it.
+- The default refresh path must not require Ollama, LanceDB, or the legacy knowledge-graph runtime.
 
 #### Response Shape
 ```json
@@ -145,13 +144,18 @@ async def refresh_index(
         "filesScanned": 0,
         "filesChanged": 0,
         "filesSkipped": 0,
-        "chunksIndexed": 0,
-        "edgesRebuilt": 0
+        "filesRemoved": 0,
+        "symbolsIndexed": 0,
+        "importsIndexed": 0
     },
     "degradedMode": false,
     "warnings": ["string"]
 }
 ```
+
+### Disabled Tool Behavior
+
+Disabled legacy tools must fail clearly and immediately with a message that they are unavailable on the structural-only reboot branch.
 
 ### 2. `get_index_status`
 **Role**: trust and freshness inspection

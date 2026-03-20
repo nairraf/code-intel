@@ -28,9 +28,10 @@ class SymbolLinker:
         if not chunk.usages:
             return
 
+        normalized_project_root = normalize_path(project_root)
         lang = chunk.language
         resolver = self.resolvers.get(lang)
-        project_root_path = Path(normalize_path(project_root))
+        project_root_path = Path(normalized_project_root)
         
         # Prepare list of symbols to resolve: standard usages + decorators
         symbols_to_resolve = []
@@ -118,5 +119,8 @@ class SymbolLinker:
                             "character": usage.character,
                             "match_type": match_type
                         },
-                        auto_commit=False
+                        auto_commit=False,
+                        project_root=normalized_project_root,
+                        source_filename=chunk.filename,
+                        target_filename=target_chunk_dict.get("filename"),
                     )
