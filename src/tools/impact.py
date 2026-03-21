@@ -144,6 +144,14 @@ def _boost_sort_score(payload: dict, score: int) -> None:
     payload["_sort_score"] = max(int(payload.get("_sort_score", 0)), score)
 
 
+def _incoming_file_score(depth: int) -> int:
+    return max(120, 360 - (depth * 60))
+
+
+def _incoming_symbol_score(depth: int) -> int:
+    return max(120, 320 - (depth * 50))
+
+
 def _collect_component_seed_symbol_ids(ctx, project_root: str, symbol_records) -> set[str]:
     seed_symbol_ids: set[str] = set()
     inspected_files: set[str] = set()
@@ -259,29 +267,90 @@ async def impact_analysis_impl(
         }
 
     changed_file_set = set(normalized_changed_files)
-    incoming_edges = ctx.structural_store.list_incoming_edges(
-        project_root,
-        list(affected_symbols_map.keys()),
-        edge_kind="call",
-    )
     seen_file_evidence: set[tuple[str, int, str, str]] = set()
-    for edge in incoming_edges:
+    source_symbol_cache: dict[str, object | None] = {}
+    bridge_symbol_depths: dict[str, int] = {}
+
+    def get_cached_symbol(symbol_id: str):
+        cached_symbol = source_symbol_cache.get(symbol_id)
+        if symbol_id not in source_symbol_cache:
+            cached_symbol = ctx.structural_store.get_symbol_by_id(project_root, symbol_id)
+            source_symbol_cache[symbol_id] = cached_symbol
+        return cached_symbol
+
+    def record_bridge_symbol(source_symbol_id: str, target_symbol, line_number: int, confidence: str, depth: int) -> None:
+        source_symbol = get_cached_symbol(source_symbol_id)
+        if source_symbol is None:
+            return
+        if not is_concrete_definition_kind(source_symbol.symbol_kind):
+            return
+        if is_test_file(source_symbol.filename):
+            return
+
+        previous_depth = bridge_symbol_depths.get(source_symbol.symbol_id)
+        if previous_depth is None or depth < previous_depth:
+            bridge_symbol_depths[source_symbol.symbol_id] = depth
+
+        if source_symbol.parent_symbol:
+            return
+        if source_symbol.symbol_kind == "static_final_declaration_list":
+            sibling_symbols = [
+                sibling
+                for sibling in ctx.structural_store.list_symbols(project_root, source_symbol.filename)
+                if sibling.symbol_id != source_symbol.symbol_id
+                and not sibling.parent_symbol
+                and sibling.symbol_kind == source_symbol.symbol_kind
+                and not sibling.symbol_name.startswith("_")
+            ]
+            for sibling in sibling_symbols:
+                sibling_depth = bridge_symbol_depths.get(sibling.symbol_id)
+                if sibling_depth is None or depth < sibling_depth:
+                    bridge_symbol_depths[sibling.symbol_id] = depth
+        if "function" in source_symbol.symbol_kind or "method" in source_symbol.symbol_kind:
+            return
+
+        payload = affected_symbols_map.setdefault(
+            source_symbol.symbol_id,
+            {
+                "symbol": source_symbol.symbol_name,
+                "file": source_symbol.filename,
+                "confidence": confidence,
+                "reasons": [],
+                "_sort_score": 0,
+                "evidence": [],
+            },
+        )
+        _boost_sort_score(payload, _incoming_symbol_score(depth))
+        payload["reasons"].append(f"depends on impacted symbol {target_symbol.symbol_name}")
+        payload["evidence"].append(
+            {
+                "kind": "heuristic",
+                "reason": f"Exact structural caller of impacted symbol {target_symbol.symbol_name}.",
+                "source": source_symbol.filename,
+                "line": line_number,
+                "confidence": confidence,
+            }
+        )
+
+    def record_incoming_edge(edge, depth: int) -> None:
         metadata = parse_edge_metadata(edge)
         target_symbol = ctx.structural_store.get_symbol_by_id(project_root, edge.target_symbol_id)
+        if target_symbol is None:
+            return
+
         line_number = int(metadata.get("line", 0) or 0)
         match_type = metadata.get("match_type", "exact")
         if match_type == "local_symbol" and edge.source_filename == edge.target_filename:
-            continue
+            return
 
         evidence_key = (edge.source_filename, line_number, edge.target_symbol_id, match_type)
         if evidence_key in seen_file_evidence:
-            continue
+            return
         seen_file_evidence.add(evidence_key)
 
         confidence = edge_confidence(match_type)
-        reason = "calls changed symbol"
-        if target_symbol is not None:
-            reason = f"calls changed symbol {target_symbol.symbol_name}"
+        reason_prefix = "calls changed symbol" if depth == 1 else "calls impacted symbol"
+        reason = f"{reason_prefix} {target_symbol.symbol_name}"
         payload = affected_files_map.setdefault(
             edge.source_filename,
             {
@@ -292,7 +361,7 @@ async def impact_analysis_impl(
                 "evidence": [],
             },
         )
-        _boost_sort_score(payload, 300 if confidence == "exact" else 250)
+        _boost_sort_score(payload, _incoming_file_score(depth))
         if edge.source_filename not in changed_file_set or reason not in payload["reasons"]:
             payload["reasons"].append(reason)
         payload["evidence"].append(
@@ -304,6 +373,39 @@ async def impact_analysis_impl(
                 "confidence": confidence,
             }
         )
+
+        record_bridge_symbol(edge.source_symbol_id, target_symbol, line_number, confidence, depth)
+
+    incoming_edges = ctx.structural_store.list_incoming_edges(
+        project_root,
+        list(affected_symbols_map.keys()),
+        edge_kind="call",
+    )
+    for edge in incoming_edges:
+        record_incoming_edge(edge, depth=1)
+
+    max_incoming_depth = 3
+    expanded_bridge_symbols: set[str] = set()
+    current_depth = 1
+    while current_depth < max_incoming_depth:
+        frontier_ids = [
+            symbol_id
+            for symbol_id, symbol_depth in bridge_symbol_depths.items()
+            if symbol_depth == current_depth and symbol_id not in expanded_bridge_symbols
+        ]
+        if not frontier_ids:
+            current_depth += 1
+            continue
+
+        expanded_bridge_symbols.update(frontier_ids)
+        propagated_edges = ctx.structural_store.list_incoming_edges(
+            project_root,
+            frontier_ids,
+            edge_kind="call",
+        )
+        for edge in propagated_edges:
+            record_incoming_edge(edge, depth=current_depth + 1)
+        current_depth += 1
 
     outgoing_edges = ctx.structural_store.list_outgoing_edges(
         project_root,

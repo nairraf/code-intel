@@ -61,11 +61,56 @@ def fixture_dart_impact_project(tmp_path):
         encoding="utf-8",
     )
     (lib_dir / "notes_repository.dart").write_text(
-        "import 'note.dart';\n\nclass NotesRepository {\n  Note load(Object doc) {\n    return Note.fromFirestore(doc);\n  }\n}\n",
+        "import 'note.dart';\n\nclass NotesRepository {\n  Note load(Object doc) {\n    return Note.fromFirestore(doc);\n  }\n\n  List<Note> getNotesStream(Object userId) {\n    return [Note.fromFirestore(userId)];\n  }\n\n  Note getNoteStream(Object userId, Object doc) {\n    return Note.fromFirestore(doc);\n  }\n\n  void updateNote(Note note) {}\n}\n",
         encoding="utf-8",
     )
     (test_dir / "note_test.dart").write_text(
         "import '../lib/note.dart';\n\nvoid main() {\n  final note = Note.fromFirestore(Object());\n}\n",
+        encoding="utf-8",
+    )
+    (lib_dir / "notes_providers.dart").write_text(
+        "import 'notes_repository.dart';\n\n"
+        "class Ref {\n"
+        "  const Ref();\n"
+        "  dynamic watch(dynamic value) => value;\n"
+        "  dynamic read(dynamic value) => value;\n"
+        "}\n\n"
+        "const ref = Ref();\n\n"
+        "final notesRepositoryProvider = NotesRepository();\n"
+        "final notesListProvider = ref.watch(notesRepositoryProvider).getNotesStream('user');\n"
+        "final noteProvider = ref.watch(notesRepositoryProvider).getNoteStream('user', Object());\n",
+        encoding="utf-8",
+    )
+    (lib_dir / "notes_screen.dart").write_text(
+        "import 'notes_providers.dart';\n\n"
+        "class NotesScreen {\n"
+        "  void build() {\n"
+        "    ref.watch(notesListProvider);\n"
+        "  }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    (lib_dir / "home_screen.dart").write_text(
+        "import 'notes_providers.dart';\n\n"
+        "class HomeScreen {\n"
+        "  void build() {\n"
+        "    ref.watch(notesListProvider);\n"
+        "  }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    (test_dir / "notes_screen_test.dart").write_text(
+        "import '../lib/notes_screen.dart';\n\n"
+        "void main() {\n"
+        "  NotesScreen().build();\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    (test_dir / "home_screen_test.dart").write_text(
+        "import '../lib/home_screen.dart';\n\n"
+        "void main() {\n"
+        "  HomeScreen().build();\n"
+        "}\n",
         encoding="utf-8",
     )
     (lib_dir / "manual_highlighter_controller.dart").write_text(
@@ -94,11 +139,16 @@ def fixture_dart_impact_project(tmp_path):
         encoding="utf-8",
     )
     (lib_dir / "note_detail_screen.dart").write_text(
-        "import 'guided_validation_screen.dart';\n\n"
+        "import 'guided_validation_screen.dart';\n"
+        "import 'notes_providers.dart';\n\n"
         "class NoteDetailScreen {\n"
         "  void open() {\n"
         "    final screen = GuidedValidationScreen();\n"
         "    screen.createState().build();\n"
+        "  }\n\n"
+        "  void save(Object doc) {\n"
+        "    ref.read(notesRepositoryProvider).load(doc);\n"
+        "    ref.read(notesRepositoryProvider).updateNote(ref.read(noteProvider));\n"
         "  }\n"
         "}\n",
         encoding="utf-8",
@@ -271,3 +321,42 @@ async def test_impact_analysis_includes_direct_component_collaborators_for_dart_
     assert any(item["file"].endswith("guided_validation_note_panel.dart") for item in result["affectedFiles"])
     assert any(item["symbol"] == "ManualHighlighterController" for item in result["affectedSymbols"])
     assert any(test["file"].endswith("guided_validation_screen_test.dart") for test in result["candidateTests"])
+
+
+@pytest.mark.asyncio
+async def test_impact_analysis_propagates_repository_impacts_through_provider_wrappers(dart_impact_project, tmp_path):
+    structural_store = StructuralStore(str(tmp_path / "dart_repository_chain.sqlite"))
+    structural_refresher = StructuralRefresher(structural_store, CodeParser())
+
+    with patch("src.context._context.structural_store", structural_store), \
+         patch("src.context._context.structural_refresher", structural_refresher):
+        await refresh_index.fn(root_path=str(dart_impact_project), force_full_scan=True)
+        result = await impact_analysis.fn(
+            root_path=str(dart_impact_project),
+            changed_symbols=["NotesRepository"],
+            include_tests=True,
+        )
+
+    assert result["status"] == "ok"
+    assert any(item["file"].endswith("note_detail_screen.dart") for item in result["affectedFiles"])
+    assert any(item["symbol"] == "notesRepositoryProvider" for item in result["affectedSymbols"])
+
+
+@pytest.mark.asyncio
+async def test_impact_analysis_propagates_named_factory_impacts_through_provider_chain(dart_impact_project, tmp_path):
+    structural_store = StructuralStore(str(tmp_path / "dart_factory_chain.sqlite"))
+    structural_refresher = StructuralRefresher(structural_store, CodeParser())
+
+    with patch("src.context._context.structural_store", structural_store), \
+         patch("src.context._context.structural_refresher", structural_refresher):
+        await refresh_index.fn(root_path=str(dart_impact_project), force_full_scan=True)
+        result = await impact_analysis.fn(
+            root_path=str(dart_impact_project),
+            changed_symbols=["Note.fromFirestore"],
+            include_tests=True,
+        )
+
+    assert result["status"] == "ok"
+    assert any(item["file"].endswith("notes_repository.dart") for item in result["affectedFiles"])
+    assert any(item["file"].endswith("notes_screen.dart") for item in result["affectedFiles"])
+    assert any(item["file"].endswith("home_screen.dart") for item in result["affectedFiles"])
