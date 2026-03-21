@@ -45,6 +45,17 @@ The reboot is considered successful only if all of the following become true:
 4. impact analysis provides first-pass value beyond raw search alone
 5. the touched code remains above the repository quality gate
 
+## Latest External Evidence
+
+The branch now has initial external validation on `selos`.
+
+- a full structural rebuild completed in about `29.49s` across `203` files
+- trust reporting returned usable current-state output after rebuild
+- the structural-only toolset produced meaningful symbol and impact results for Dart, Python, and Firestore
+- the main remaining quality gaps were heuristic-heavy test ranking and limited richer framework-depth for Dart or Flutter workflows
+
+This is enough evidence to keep the reboot alive. It is not yet enough evidence to declare the reboot complete.
+
 ## Architecture Baseline
 
 The reboot keeps these core assets:
@@ -130,7 +141,8 @@ The preferred architecture and technology direction are documented in `docs/arch
 	- [x] test impact candidates included in the analysis output
 	- [x] `get_index_status` implemented and exposed on the structural core
 	- [x] live MCP validation completed on this repository
-	- [ ] benchmark usefulness on `selos` and broader real-agent workflows
+	- [x] initial usefulness benchmark completed on `selos`
+	- [ ] broader real-agent workflow validation and quality follow-through
 
 ### Milestone R5: Scoped Rich Enrichment
 - **Status:** Not started

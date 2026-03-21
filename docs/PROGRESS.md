@@ -8,9 +8,9 @@
 
 ## Current Stage
 
-We are in structural-core trust-surface validation.
+We are in external validation and reboot decision shaping.
 
-The branch now has a structural-only default runtime plus the first reboot-native trust and analysis tools running live on the new core. The next question is no longer whether the core can exist. The next question is whether it proves enough value on larger real repositories to justify continuing the reboot.
+The branch now has a structural-only default runtime plus the first reboot-native trust and analysis tools running live on the new core. Initial validation on `selos` now says the core is practical enough to keep evaluating. The next question is narrower: whether the reboot earns continued investment after follow-through on ranking quality, trust messaging, and broader real-agent usefulness.
 
 ## What Has Been Reset
 
@@ -102,8 +102,9 @@ The branch will be judged on whether it improves these practical outcomes:
   - [x] `impact_analysis` ranking tightened to reduce same-file file noise, heuristic test spillover, and changed-file symbol noise
   - [x] dirty workspaces now report usable structural freshness with explicit warnings instead of generic stale status immediately after a successful rebuild
   - [x] disabled legacy wrappers are now hidden from MCP discovery so the exposed tool catalog matches the branch reality
+  - [x] initial external validation on `selos` confirmed practical rebuild speed plus useful structural output in Dart, Python, and Firestore
 - **Remaining:**
-  - [ ] benchmark whether the new tools are actually useful on real agent tasks and on `selos`
+  - [ ] improve broader real-agent usefulness, especially Dart or Flutter impact depth and test candidate quality
 
 ### Milestone R5: Scoped Rich Enrichment
 - **Status:** Not started
@@ -135,16 +136,22 @@ These numbers are useful historical context, but they are not yet reboot-branch 
   - skipped files: `195`
   - total chunks: `920`
   - elapsed time: approximately `1 minute`
+- `selos` structural-core reboot validation:
+  - full rebuild: `203` files in approximately `29.49 seconds`
+  - post-refresh trust state: `status ok`, `structuralState current`, `workspaceState clean`
+  - observed useful symbol and impact output for Dart, Python, and Firestore
+  - observed limitation: test candidate selection remains heuristic-heavy and deeper framework-aware impact is still deferred
 
 Interpretation:
 
 - no-change refresh is not cheap enough yet, but it is dramatically better than the changed-file case
 - one-file refresh is also much cheaper than the multi-file stale-file case
 - the multi-file changed-state path is the more urgent performance and trust target
+- the reboot now has credible external evidence that the structural-only core is useful, but not yet enough evidence to declare the decision gate passed
 
 ## Immediate Next Steps
 
-- [ ] benchmark the structural-only runtime and reboot-native tools on `selos`
+- [ ] deepen `selos` follow-up on Dart or Flutter impact depth and test candidate quality
 - [ ] capture before-and-after evidence for the reboot decision gate
 - [ ] write the security reasoning and trust summary for the new structural core logic
 

@@ -139,10 +139,22 @@ uv run python -m src.server
 This branch is in reboot mode.
 
 - branch of record: `feature/structural-context-pivot`
-- current phase: structural-core trust surface and agent-tool validation
-- next implementation target: `selos` benchmark validation and reboot decision evidence
+- current phase: external validation and reboot decision evidence
+- next implementation target: turn `selos` validation into decision-quality follow-through on trust, ranking, and scope
 
 The legacy runtime is no longer the implementation base for the default path on this branch. New work is expected to land on the structural core only.
+
+## External Validation Snapshot
+
+The reboot has now been exercised outside this repository on `selos`.
+
+- full structural rebuild completed in about `29.49s` across `203` files
+- `get_index_status` reported `structuralState: current` and `workspaceState: clean` after rebuild
+- meaningful structural output was observed for Dart, Python, and Firestore symbols
+- `impact_analysis` produced practical first-pass blast-radius guidance, with test matching still more heuristic than authoritative
+- the live MCP registry on this branch exposes `refresh_index`, `get_index_status`, `get_stats`, `inspect_symbol`, and `impact_analysis`
+
+One external report did not list `inspect_symbol` in its surfaced catalog, but the live FastMCP registry on this branch does include it. Treat that discrepancy as a discovery-session artifact unless reproduced.
 
 ## Repository Documents
 
