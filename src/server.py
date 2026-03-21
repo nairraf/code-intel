@@ -22,6 +22,7 @@ from .context import get_context
 from .indexer import refresh_index_impl
 from .tools.inspect import inspect_symbol_impl
 from .tools.impact import impact_analysis_impl
+from .tools.status import get_index_status_impl
 from .tools.stats import get_stats_impl
 
 # ---------------------------------------------------------------------------
@@ -97,6 +98,7 @@ async def search_code(
     include: str = None,
     exclude: str = None,
 ) -> str:
+    _ = query, root_path, limit, include, exclude
     return _disabled_legacy_tool_message("search_code")
 
 
@@ -112,6 +114,20 @@ async def get_stats(root_path: str) -> str:
     """
     norm_root = normalize_path(root_path)
     return await get_stats_impl(norm_root, _get_ctx())
+
+
+@mcp.tool()
+async def get_index_status(root_path: str) -> dict:
+    """
+    Reports whether structural state exists and whether it is fresh enough for agent use.
+
+    Best for: Checking trust, freshness, and available capabilities before using downstream analysis tools.
+
+    Args:
+        root_path: MUST be the absolute path to the active workspace project root. NEVER use '.' or relative paths.
+    """
+    norm_root = normalize_path(root_path)
+    return await get_index_status_impl(norm_root, _get_ctx())
 
 
 @mcp.tool()
@@ -166,11 +182,13 @@ async def find_definition(
     symbol_name: Optional[str],
     root_path: str,
 ) -> str:
+    _ = filename, line, symbol_name, root_path
     return _disabled_legacy_tool_message("find_definition")
 
 
 @mcp.tool()
 async def find_references(symbol_name: str, root_path: str) -> str:
+    _ = symbol_name, root_path
     return _disabled_legacy_tool_message("find_references")
 
 

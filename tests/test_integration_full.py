@@ -6,13 +6,14 @@ from unittest.mock import patch
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.server import refresh_index, search_code, get_stats
+from src.parser import CodeParser
+from src.server import get_index_status, refresh_index, search_code, get_stats
 from src.structural_core.refresh import StructuralRefresher
 from src.structural_core.store import StructuralStore
 
 
-@pytest.fixture
-def dummy_project(tmp_path):
+@pytest.fixture(name="dummy_project")
+def fixture_dummy_project(tmp_path):
     """Creates a small project with a few files."""
     project_root = tmp_path / "integration_proj"
     project_root.mkdir()
@@ -46,7 +47,7 @@ async def test_end_to_end_flow(dummy_project, tmp_path):
     structural_db_path = tmp_path / "integration_structural.sqlite"
 
     structural_store = StructuralStore(str(structural_db_path))
-    structural_refresher = StructuralRefresher(structural_store, __import__("src.context", fromlist=["_context"])._context.parser)
+    structural_refresher = StructuralRefresher(structural_store, CodeParser())
 
     with patch("src.context._context.structural_store", structural_store), \
          patch("src.context._context.structural_refresher", structural_refresher):
@@ -68,6 +69,11 @@ async def test_end_to_end_flow(dummy_project, tmp_path):
         assert "Indexed Symbols:" in stats_result
         assert "Project Pulse:" in stats_result
 
+        status_result = await get_index_status.fn(root_path=str(dummy_project))
+        assert status_result["status"] == "ok"
+        assert status_result["capabilities"]["structuralNavigation"] is True
+        assert status_result["capabilities"]["impactAnalysis"] is True
+
         # 4. Incremental update check
         (dummy_project / "new.py").write_text("def extra(): pass")
         refresh_result_inc = await refresh_index.fn(root_path=str(dummy_project))
@@ -82,7 +88,7 @@ async def test_no_change_incremental_skips_rehashing(dummy_project, tmp_path):
     structural_db_path = tmp_path / "manifest_structural.sqlite"
 
     structural_store = StructuralStore(str(structural_db_path))
-    structural_refresher = StructuralRefresher(structural_store, __import__("src.context", fromlist=["_context"])._context.parser)
+    structural_refresher = StructuralRefresher(structural_store, CodeParser())
 
     with patch("src.context._context.structural_store", structural_store), \
          patch("src.context._context.structural_refresher", structural_refresher):
@@ -102,7 +108,7 @@ async def test_incremental_hashes_only_changed_files(dummy_project, tmp_path):
     structural_db_path = tmp_path / "manifest_changed_structural.sqlite"
 
     structural_store = StructuralStore(str(structural_db_path))
-    structural_refresher = StructuralRefresher(structural_store, __import__("src.context", fromlist=["_context"])._context.parser)
+    structural_refresher = StructuralRefresher(structural_store, CodeParser())
 
     with patch("src.context._context.structural_store", structural_store), \
          patch("src.context._context.structural_refresher", structural_refresher):
@@ -129,7 +135,7 @@ async def test_refresh_index_persists_structural_core_state(dummy_project, tmp_p
     structural_db_path = tmp_path / "structural_state.sqlite"
 
     structural_store = StructuralStore(str(structural_db_path))
-    structural_refresher = StructuralRefresher(structural_store, __import__("src.context", fromlist=["_context"])._context.parser)
+    structural_refresher = StructuralRefresher(structural_store, CodeParser())
 
     with patch("src.context._context.structural_store", structural_store), \
          patch("src.context._context.structural_refresher", structural_refresher):

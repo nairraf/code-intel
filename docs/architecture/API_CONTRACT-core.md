@@ -99,12 +99,13 @@ Every response that depends on index state should support a freshness block shap
 
 ### Active Branch Tools
 - `refresh_index`
-- `get_stats`
-
-### Planned Rebuild Tools
 - `get_index_status`
 - `inspect_symbol`
+- `get_stats`
 - `impact_analysis`
+
+### Planned Rebuild Tools
+- `enrich_analysis`
 
 ### Disabled Legacy Tools
 - `search_code`

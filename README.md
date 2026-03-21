@@ -62,7 +62,7 @@ The reboot now centers on a smaller core:
 2. cheap incremental refresh
 3. exact symbol and import persistence
 4. structural stats and trust reporting
-5. later rebuild of agent-facing inspection and impact analysis on the new core
+5. reboot-native symbol inspection and impact analysis on the new core
 
 ## Technical Direction
 
@@ -87,7 +87,10 @@ The preferred architecture and technology direction for the reboot are documente
 The active tool surface for this branch is now intentionally narrow:
 
 - `refresh_index`
+- `get_index_status`
 - `get_stats`
+- `inspect_symbol`
+- `impact_analysis`
 
 The following tools are disabled on this branch until they are rebuilt on the new structural core:
 
@@ -95,7 +98,7 @@ The following tools are disabled on this branch until they are rebuilt on the ne
 - `find_definition`
 - `find_references`
 
-Future reboot-native tools such as `inspect_symbol`, `impact_analysis`, and `get_index_status` will only be added after they are implemented directly on the new structural core.
+`enrich_analysis` remains deferred until the structural-only core proves its value on larger real-repository workflows.
 
 The detailed contracts are defined in [docs/architecture/API_CONTRACT-core.md](docs/architecture/API_CONTRACT-core.md).
 
@@ -134,8 +137,8 @@ uv run python -m src.server
 This branch is in reboot mode.
 
 - branch of record: `feature/structural-context-pivot`
-- current phase: structural-only cutover
-- next implementation target: exact edge persistence, structural status reporting, and new-core agent tooling
+- current phase: structural-core trust surface and agent-tool validation
+- next implementation target: `selos` benchmark validation and reboot decision evidence
 
 The legacy runtime is no longer the implementation base for the default path on this branch. New work is expected to land on the structural core only.
 

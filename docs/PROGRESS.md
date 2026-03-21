@@ -8,9 +8,9 @@
 
 ## Current Stage
 
-We are in structural-only foundation build-out.
+We are in structural-core trust-surface validation.
 
-The branch has now explicitly approved a default runtime that abandons the legacy semantic/vector/graph core. New work should land only on the structural core unless the reboot contract is revised.
+The branch now has a structural-only default runtime plus the first reboot-native trust and analysis tools running live on the new core. The next question is no longer whether the core can exist. The next question is whether it proves enough value on larger real repositories to justify continuing the reboot.
 
 ## What Has Been Reset
 
@@ -70,7 +70,7 @@ The branch will be judged on whether it improves these practical outcomes:
   - [ ] reduce additional fixed overhead beyond file hashing
 
 ### Milestone R2.5: Parallel Structural Core Rebuild
-- **Status:** In progress
+- **Status:** Completed
 - **Completed:**
   - [x] branch direction reset toward a minimal parallel rebuild rather than further in-place stripping
   - [x] minimum structural core schema defined
@@ -81,11 +81,15 @@ The branch will be judged on whether it improves these practical outcomes:
   - [x] default refresh no longer executes legacy semantic or graph work
   - [x] `get_stats` now reads structural-core facts only
   - [x] exact structural edges now persist in SQLite and relink unchanged callers after target changes
-- **Remaining:**
-  - [ ] port exact symbol inspection onto the new core
+  - [x] `inspect_symbol`, `impact_analysis`, and `get_index_status` now execute directly on the new structural core
 
 ### Milestone R3: Structural-First Indexing
-- **Status:** Not started
+- **Status:** Completed
+- **Completed:**
+  - [x] structural indexing now completes without any dependency on embeddings in the default path
+  - [x] `get_index_status` implemented for trust and freshness visibility
+  - [x] `inspect_symbol` implemented on the structural core
+  - [x] regression coverage added for structural-only operation
 
 ### Milestone R4: Agent-Facing Tooling
 - **Status:** In progress
@@ -93,9 +97,11 @@ The branch will be judged on whether it improves these practical outcomes:
   - [x] `inspect_symbol` implemented on structural-core definitions and incoming edges
   - [x] `impact_analysis` implemented on structural-core symbols, edges, and tracked-file heuristics
   - [x] explainable reasons and confidence labels returned for affected files, symbols, and candidate tests
+  - [x] `get_index_status` implemented on structural-core freshness and capability state
+  - [x] live MCP validation completed for `inspect_symbol`, `impact_analysis`, and `get_index_status` on this repository
+  - [x] `impact_analysis` ranking tightened to reduce same-file file noise, heuristic test spillover, and changed-file symbol noise
 - **Remaining:**
-  - [ ] validate the new tool behavior through the live MCP surface
-  - [ ] benchmark whether the new tools are actually useful on real agent tasks
+  - [ ] benchmark whether the new tools are actually useful on real agent tasks and on `selos`
 
 ### Milestone R5: Scoped Rich Enrichment
 - **Status:** Not started
@@ -136,9 +142,9 @@ Interpretation:
 
 ## Immediate Next Steps
 
-- [ ] add exact edge persistence and exact symbol inspection to the new core
-- [ ] port exact symbol inspection onto the new core
-- [ ] use `selos` benchmarks only after the structural-only cutover lands
+- [ ] benchmark the structural-only runtime and reboot-native tools on `selos`
+- [ ] capture before-and-after evidence for the reboot decision gate
+- [ ] write the security reasoning and trust summary for the new structural core logic
 
 ## Preferred Technical Direction
 

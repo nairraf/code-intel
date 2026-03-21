@@ -99,7 +99,7 @@ The preferred architecture and technology direction are documented in `docs/arch
 	- [ ] further reduction of fixed incremental overhead beyond hashing
 
 ### Milestone R2.5: Parallel Structural Core Rebuild
-- **Status:** In progress
+- **Status:** Completed
 - **Goal:** replace the legacy refresh engine as the primary implementation path with a smaller structural core built for the reboot thesis.
 - **Deliverables:**
 	- [x] minimum SQLite schema defined for files, manifest, symbols, imports, edges, and refresh runs
@@ -111,13 +111,13 @@ The preferred architecture and technology direction are documented in `docs/arch
 	- [x] exact structural linking built without LanceDB as the structural authority
 
 ### Milestone R3: Structural-First Indexing
-- **Status:** Not started
+- **Status:** Completed
 - **Goal:** finish the new-core tool surface on top of the structural-only runtime.
 - **Deliverables:**
-	- [ ] structural indexing completes without any dependency on embeddings in the default path
-	- [ ] `get_index_status` implemented for trust and freshness visibility
-	- [ ] `inspect_symbol` implemented on the structural core
-	- [ ] regression coverage for structural-only operation
+	- [x] structural indexing completes without any dependency on embeddings in the default path
+	- [x] `get_index_status` implemented for trust and freshness visibility
+	- [x] `inspect_symbol` implemented on the structural core
+	- [x] regression coverage for structural-only operation
 
 ### Milestone R4: Agent-Facing Tooling
 - **Status:** In progress
@@ -128,6 +128,9 @@ The preferred architecture and technology direction are documented in `docs/arch
 	- [x] `impact_analysis` implementation
 	- [x] explainable output with reasons and confidence labels
 	- [x] test impact candidates included in the analysis output
+	- [x] `get_index_status` implemented and exposed on the structural core
+	- [x] live MCP validation completed on this repository
+	- [ ] benchmark usefulness on `selos` and broader real-agent workflows
 
 ### Milestone R5: Scoped Rich Enrichment
 - **Status:** Not started

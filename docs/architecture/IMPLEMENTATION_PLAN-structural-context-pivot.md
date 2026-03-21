@@ -39,7 +39,9 @@
 
 ## Phase 6: Agent-Facing Tooling Rebuild
 - [Architect] Finalize the `inspect_symbol` and `impact_analysis` contracts with explicit inputs, outputs, confidence semantics, and evidence fields.
+- [Architect] Finalize the `get_index_status` contract for structural freshness, capability state, and trust limitations.
 - [SeniorDev] Implement `inspect_symbol` directly on structural-core facts.
+- [SeniorDev] Implement `get_index_status` directly on structural-core refresh and capability state.
 - [SeniorDev] Implement `impact_analysis` on structural-core edges and imports.
 - [SeniorDev] Keep output explainable by attaching reasons and evidence for every affected file, symbol, or test candidate.
 - [Dev] Add end-to-end tests and benchmark scenarios showing the new tools provide better first-pass guidance than raw search alone.
