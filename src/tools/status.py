@@ -38,6 +38,7 @@ async def get_index_status_impl(root_path: str = ".", ctx: AppContext = None) ->
             freshness = {
                 "projectRoot": project_root_str,
                 "structuralState": "missing",
+                "workspaceState": "unknown",
                 "enrichmentState": "disabled",
                 "lastStructuralRefreshAt": None,
                 "lastEnrichmentAt": None,
@@ -72,7 +73,7 @@ async def get_index_status_impl(root_path: str = ".", ctx: AppContext = None) ->
         warnings.append("Semantic search is disabled on the structural-only reboot branch.")
         warnings.append("Rich framework analysis is not available on the structural-only runtime.")
 
-        status = "stale" if freshness["structuralState"] == "stale" else "ok"
+        status = "ok"
         return {
             "status": status,
             "freshness": freshness,
@@ -84,6 +85,7 @@ async def get_index_status_impl(root_path: str = ".", ctx: AppContext = None) ->
         freshness = {
             "projectRoot": project_root_str,
             "structuralState": "missing",
+            "workspaceState": "unknown",
             "enrichmentState": "disabled",
             "lastStructuralRefreshAt": None,
             "lastEnrichmentAt": None,

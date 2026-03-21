@@ -98,6 +98,8 @@ The following tools are disabled on this branch until they are rebuilt on the ne
 - `find_definition`
 - `find_references`
 
+These disabled legacy wrappers are intentionally hidden from normal MCP discovery on this branch so the exposed tool catalog matches the working surface.
+
 `enrich_analysis` remains deferred until the structural-only core proves its value on larger real-repository workflows.
 
 The detailed contracts are defined in [docs/architecture/API_CONTRACT-core.md](docs/architecture/API_CONTRACT-core.md).

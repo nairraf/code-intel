@@ -50,6 +50,7 @@ async def build_freshness(project_root: str, ctx, include: str | None = None, ex
         return {
             "projectRoot": normalized_root,
             "structuralState": "missing",
+            "workspaceState": "unknown",
             "enrichmentState": "disabled",
             "lastStructuralRefreshAt": None,
             "lastEnrichmentAt": None,
@@ -58,13 +59,15 @@ async def build_freshness(project_root: str, ctx, include: str | None = None, ex
         }, ["No structural refresh has been recorded yet."]
 
     is_dirty = await check_git_dirty(normalized_root)
-    structural_state = "stale" if is_dirty else "current"
+    structural_state = "current"
+    workspace_state = "dirty" if is_dirty else "clean"
     if is_dirty:
         warnings.append("Repository has uncommitted changes since the last structural refresh.")
 
     return {
         "projectRoot": normalized_root,
         "structuralState": structural_state,
+        "workspaceState": workspace_state,
         "enrichmentState": "disabled",
         "lastStructuralRefreshAt": refresh_run.last_refresh_at,
         "lastEnrichmentAt": None,

@@ -70,6 +70,7 @@ Every response that depends on index state should support a freshness block shap
 {
     "projectRoot": "d:/repo",
     "structuralState": "current|partial|stale|missing",
+    "workspaceState": "clean|dirty|unknown",
     "enrichmentState": "ready|partial|pending|disabled|failed",
     "lastStructuralRefreshAt": "ISO-8601 timestamp or null",
     "lastEnrichmentAt": "ISO-8601 timestamp or null",
@@ -111,6 +112,8 @@ Every response that depends on index state should support a freshness block shap
 - `search_code`
 - `find_definition`
 - `find_references`
+
+Disabled legacy tools should remain callable only through explicit compatibility wrappers in tests or internal code paths. They should not appear in normal MCP tool discovery on the structural-only reboot branch.
 
 ## Tool Contracts
 

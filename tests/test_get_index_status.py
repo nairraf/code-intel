@@ -44,7 +44,7 @@ async def test_get_index_status_ready_without_edges():
 
 
 @pytest.mark.asyncio
-async def test_get_index_status_stale_with_edges():
+async def test_get_index_status_dirty_workspace_is_usable_with_warning():
     mock_ctx = MagicMock()
     refresh_run = RefreshRun(
         project_root="/root",
@@ -67,7 +67,9 @@ async def test_get_index_status_stale_with_edges():
     with patch("src.tools.structural_common.check_git_dirty", return_value=True):
         result = await get_index_status_impl(root_path="/root", ctx=mock_ctx)
 
-    assert result["status"] == "stale"
+    assert result["status"] == "ok"
+    assert result["freshness"]["structuralState"] == "current"
+    assert result["freshness"]["workspaceState"] == "dirty"
     assert result["capabilities"]["structuralNavigation"] is True
     assert result["capabilities"]["impactAnalysis"] is True
     assert any("uncommitted changes" in warning for warning in result["warnings"])
@@ -82,6 +84,7 @@ async def test_get_index_status_missing_index():
     result = await get_index_status_impl(root_path="/root", ctx=mock_ctx)
 
     assert result["status"] == "missing"
+    assert result["freshness"]["workspaceState"] == "unknown"
     assert result["capabilities"]["structuralNavigation"] is False
     assert result["capabilities"]["impactAnalysis"] is False
     assert any("Run refresh_index" in warning for warning in result["warnings"])

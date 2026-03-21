@@ -1,9 +1,7 @@
 import pytest
-import os
 import shutil
 from pathlib import Path
-from unittest.mock import patch
-from src.server import refresh_index, search_code
+from src.server import find_definition, find_references, mcp, refresh_index, search_code
 from src.structural_core.models import StructuralRefreshResult
 
 
@@ -43,9 +41,26 @@ async def test_refresh_index_flow(mocker):
 
 
 @pytest.mark.asyncio
-async def test_search_code_flow(mocker):
+async def test_search_code_flow():
     result = await search_code.fn("my query", root_path="fake_project")
     assert "search_code is disabled" in result
+
+
+@pytest.mark.asyncio
+async def test_disabled_legacy_tools_are_hidden_from_mcp_surface():
+    tool_map = await mcp.get_tools()
+
+    assert "refresh_index" in tool_map
+    assert "get_stats" in tool_map
+    assert "get_index_status" in tool_map
+    assert "inspect_symbol" in tool_map
+    assert "impact_analysis" in tool_map
+    assert "search_code" not in tool_map
+    assert "find_definition" not in tool_map
+    assert "find_references" not in tool_map
+
+    assert "find_definition is disabled" in await find_definition.fn("file.py", 1, "symbol", "root")
+    assert "find_references is disabled" in await find_references.fn("symbol", "root")
 
 
 @pytest.mark.asyncio

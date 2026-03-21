@@ -90,6 +90,14 @@ def _disabled_legacy_tool_message(tool_name: str) -> str:
     )
 
 
+def _hide_disabled_legacy_tools() -> None:
+    for tool_name in ("search_code", "find_definition", "find_references"):
+        try:
+            mcp.remove_tool(tool_name)
+        except LookupError:
+            continue
+
+
 @mcp.tool()
 async def search_code(
     query: str,
@@ -190,6 +198,9 @@ async def find_definition(
 async def find_references(symbol_name: str, root_path: str) -> str:
     _ = symbol_name, root_path
     return _disabled_legacy_tool_message("find_references")
+
+
+_hide_disabled_legacy_tools()
 
 
 if __name__ == "__main__":

@@ -100,6 +100,8 @@ The branch will be judged on whether it improves these practical outcomes:
   - [x] `get_index_status` implemented on structural-core freshness and capability state
   - [x] live MCP validation completed for `inspect_symbol`, `impact_analysis`, and `get_index_status` on this repository
   - [x] `impact_analysis` ranking tightened to reduce same-file file noise, heuristic test spillover, and changed-file symbol noise
+  - [x] dirty workspaces now report usable structural freshness with explicit warnings instead of generic stale status immediately after a successful rebuild
+  - [x] disabled legacy wrappers are now hidden from MCP discovery so the exposed tool catalog matches the branch reality
 - **Remaining:**
   - [ ] benchmark whether the new tools are actually useful on real agent tasks and on `selos`
 
