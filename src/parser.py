@@ -168,7 +168,7 @@ class CodeParser:
             "typescript": {"class_declaration", "function_declaration", "method_definition", "interface_declaration", "enum_declaration"},
             "tsx": {"class_declaration", "function_declaration", "method_definition", "interface_declaration"},
             "go": {"function_declaration", "method_declaration", "type_declaration"},
-            "dart": {"class_definition", "function_signature", "method_signature", "method_declaration", "static_final_declaration_list", "initialized_identifier_list", "declaration", "expression_statement", "call"},
+            "dart": {"class_definition", "function_signature", "method_signature", "method_declaration", "factory_constructor_signature", "static_final_declaration_list", "initialized_identifier_list", "declaration", "expression_statement", "call"},
             "java": {"class_declaration", "method_declaration", "interface_declaration"},
             "rust": {"function_item", "impl_item", "trait_item", "macro_definition"},
             "cpp": {"function_definition", "class_specifier", "struct_specifier"},
@@ -201,12 +201,17 @@ class CodeParser:
             meta = self._extract_node_metadata(node, lang, content)
             usages = self._extract_usages(usage_node, lang)
             complexity = self._calculate_complexity(node)
+            emitted_type = node.type
+            if lang == 'dart' and node.type == 'method_signature':
+                factory_sig = next((c for c in node.children if c.type == 'factory_constructor_signature'), None)
+                if factory_sig is not None:
+                    emitted_type = 'factory_constructor_signature'
             chunk = self._create_chunk(
                 text,
                 filepath,
                 node.start_point[0] + 1,
                 node.end_point[0] + 1,
-                node.type,
+                emitted_type,
                 lang,
                 symbol_name=meta.get("symbol_name"),
                 parent_symbol=parent_name,
@@ -217,7 +222,7 @@ class CodeParser:
                 usages=usages
             )
             # Fix line tracking for Dart split nodes
-            if lang == 'dart' and node.type in ('function_signature', 'method_signature'):
+            if lang == 'dart' and emitted_type in ('function_signature', 'method_signature', 'factory_constructor_signature'):
                 sib = node.next_named_sibling
                 if sib and sib.type == 'function_body':
                     chunk.end_line = sib.end_point[0] + 1
@@ -250,6 +255,13 @@ class CodeParser:
                 fs = next((c for c in node.children if c.type == "function_signature"), None)
                 if fs:
                     name_node = fs.child_by_field_name("name")
+                factory_sig = next((c for c in node.children if c.type == "factory_constructor_signature"), None)
+                if factory_sig is not None:
+                    identifiers = [child for child in factory_sig.children if child.type == "identifier"]
+                    if len(identifiers) >= 2:
+                        name_node = identifiers[1]
+                    elif identifiers:
+                        name_node = identifiers[0]
             elif node.type == "function_signature":
                 name_node = node.child_by_field_name("name")
             elif node.type == "static_final_declaration_list":
@@ -261,6 +273,12 @@ class CodeParser:
                 decl = next((c for c in node.children if c.type == "initialized_identifier"), None)
                 if decl:
                     name_node = next((c for c in decl.children if c.type == "identifier"), None)
+            elif node.type == "factory_constructor_signature":
+                identifiers = [child for child in node.children if child.type == "identifier"]
+                if len(identifiers) >= 2:
+                    name_node = identifiers[1]
+                elif identifiers:
+                    name_node = identifiers[0]
         
         if not name_node and lang == "python" and node.type == "assignment":
             name_node = node.child_by_field_name("left")
@@ -270,7 +288,15 @@ class CodeParser:
         if name_node:
             metadata["symbol_name"] = name_node.text.decode("utf-8", errors="replace")
         # --- Signature (functions/methods only) ---
-        if "function" in node.type or "method" in node.type:
+        if node.type == "factory_constructor_signature":
+            metadata["signature"] = node.text.decode("utf-8", errors="replace")
+        elif "function" in node.type or "method" in node.type:
+            factory_sig = None
+            if lang == "dart" and node.type == "method_signature":
+                factory_sig = next((c for c in node.children if c.type == "factory_constructor_signature"), None)
+            if factory_sig is not None:
+                metadata["signature"] = factory_sig.text.decode("utf-8", errors="replace")
+                return metadata
             parts = []
             if metadata["symbol_name"]:
                 parts.append(metadata["symbol_name"])
@@ -475,6 +501,8 @@ class CodeParser:
 
         if lang == "python":
             usages.extend(self._extract_python_structural_usages(root_node))
+        elif lang == "dart":
+            usages.extend(self._extract_dart_structural_usages(root_node))
 
         # Queries for usages
         queries = {
@@ -596,6 +624,47 @@ class CodeParser:
                 ))
 
         return usages
+
+    def _extract_dart_structural_usages(self, root_node: Node) -> List[SymbolUsage]:
+        usages: List[SymbolUsage] = []
+        stack = [root_node]
+
+        while stack:
+            node = stack.pop()
+            if node.type == "type_identifier":
+                usages.append(self._build_dart_usage(node))
+            elif node.type == "identifier" and self._should_capture_dart_identifier(node):
+                usages.append(self._build_dart_usage(node))
+
+            for child in reversed(node.children):
+                stack.append(child)
+
+        return usages
+
+    def _should_capture_dart_identifier(self, node: Node) -> bool:
+        parent = node.parent
+        if parent is None:
+            return False
+        return parent.type in {"annotation", "argument", "unconditional_assignable_selector"}
+
+    def _build_dart_usage(self, node: Node) -> SymbolUsage:
+        name = node.text.decode("utf-8", errors="replace")
+        context = "call"
+        if node.type == "type_identifier":
+            ancestor = node.parent
+            while ancestor is not None:
+                if ancestor.type in {"arguments", "argument_part"}:
+                    context = "instantiation"
+                    break
+                ancestor = ancestor.parent
+
+        start_point = node.start_point
+        return SymbolUsage(
+            name=name,
+            line=start_point[0] + 1,
+            character=start_point[1],
+            context=context,
+        )
 
     def _extract_python_import_from_module(self, node: Node) -> str:
         text = node.text.decode("utf-8", errors="replace").strip()

@@ -203,15 +203,18 @@ class StructuralRefresher:
 
         if resolver and chunk.dependencies:
             for dependency in chunk.dependencies:
-                if "::" not in dependency:
-                    continue
-                module_name, imported_symbol = dependency.split("::", 1)
-                if imported_symbol != usage.name:
-                    continue
+                module_name = dependency
+                imported_symbol = None
+                if "::" in dependency:
+                    module_name, imported_symbol = dependency.split("::", 1)
+                    if imported_symbol != usage.name:
+                        continue
                 resolved_path = resolver.resolve(filename, module_name, project_root=project_root_path)
                 if not resolved_path:
                     continue
                 for symbol in self.store.list_symbols(project_root, resolved_path):
+                    if imported_symbol is None and symbol.symbol_name != usage.name:
+                        continue
                     if symbol.symbol_name == usage.name and symbol.language == chunk.language:
                         exact_targets.append((symbol, "explicit_import"))
 

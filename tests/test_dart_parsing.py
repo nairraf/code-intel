@@ -1,4 +1,3 @@
-import pytest
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -73,3 +72,31 @@ def test_dart_parsing():
 
 if __name__ == "__main__":
     test_dart_parsing()
+
+
+def test_dart_parsing_indexes_factory_constructor():
+    parser = CodeParser()
+
+    dart_code = """
+    class Note {
+      const Note();
+
+      factory Note.fromFirestore(Object doc) {
+        return const Note();
+      }
+    }
+    """
+
+    chunks = parser._chunk_node(
+        parser.parsers['dart'].parse(bytes(dart_code, "utf8")).root_node,
+        dart_code,
+        "test.dart",
+        "dart"
+    )
+
+    factory_chunk = next(c for c in chunks if c.type == "factory_constructor_signature")
+
+    assert factory_chunk.symbol_name == "fromFirestore"
+    assert factory_chunk.parent_symbol == "Note"
+    assert "factory Note.fromFirestore" in factory_chunk.signature
+    assert "return const Note();" in factory_chunk.content

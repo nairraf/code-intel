@@ -1,7 +1,6 @@
 import pytest
 import os
 import sys
-from pathlib import Path
 
 # Fix sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -9,10 +8,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.parser import CodeParser
 
 @pytest.fixture
-def parser():
+def code_parser():
     return CodeParser()
 
-def test_extract_python_usages(parser, tmp_path):
+def test_extract_python_usages(code_parser, tmp_path):
     code = """
 class MyClass:
     def method(self):
@@ -26,7 +25,7 @@ def helper():
     f = tmp_path / "test.py"
     f.write_text(code, encoding="utf-8")
     
-    chunks = parser.parse_file(str(f))
+    chunks = code_parser.parse_file(str(f))
     
     # helper chunk
     helper_chunk = next(c for c in chunks if c.symbol_name == "helper")
@@ -40,7 +39,7 @@ def helper():
     assert "helper" in usage_names
     assert "do_something" in usage_names
 
-def test_extract_python_middleware_usages(parser, tmp_path):
+def test_extract_python_middleware_usages(code_parser, tmp_path):
     code = """
 from fastapi import Depends
 
@@ -52,7 +51,7 @@ def get_users(db = Depends(get_db_session)):
     f = tmp_path / "test_middleware.py"
     f.write_text(code, encoding="utf-8")
     
-    chunks = parser.parse_file(str(f))
+    chunks = code_parser.parse_file(str(f))
     users_chunk = next(c for c in chunks if c.symbol_name == "get_users")
     
     usage_names = [u.name for u in users_chunk.usages]
@@ -65,32 +64,32 @@ def get_users(db = Depends(get_db_session)):
     assert db_session_usage.context == "dependency_injection"
 
 
-def test_extract_python_import_statement_usages(parser, tmp_path):
+def test_extract_python_import_statement_usages(code_parser, tmp_path):
     code = """
 from middleware.firebase_auth import verify_firebase_token as verify_token
 """
     f = tmp_path / "test_imports.py"
     f.write_text(code, encoding="utf-8")
 
-    chunks = parser.parse_file(str(f))
+    chunks = code_parser.parse_file(str(f))
     import_chunk = next(c for c in chunks if c.type == "import_from_statement")
 
     assert any(u.name == "verify_firebase_token" and u.context == "import" for u in import_chunk.usages)
 
 
-def test_extract_python_override_registration_usage(parser, tmp_path):
+def test_extract_python_override_registration_usage(code_parser, tmp_path):
     code = """
 app.dependency_overrides[verify_firebase_token] = override_verify_firebase_token
 """
     f = tmp_path / "test_override.py"
     f.write_text(code, encoding="utf-8")
 
-    chunks = parser.parse_file(str(f))
+    chunks = code_parser.parse_file(str(f))
     assignment_chunk = next(c for c in chunks if c.type == "assignment")
 
     assert any(u.name == "verify_firebase_token" and u.context == "override_registration" for u in assignment_chunk.usages)
 
-def test_extract_js_usages(parser, tmp_path):
+def test_extract_js_usages(code_parser, tmp_path):
     code = """
 function main() {
     console.log("Hello");
@@ -101,7 +100,7 @@ function main() {
     f = tmp_path / "test.js"
     f.write_text(code, encoding="utf-8")
     
-    chunks = parser.parse_file(str(f))
+    chunks = code_parser.parse_file(str(f))
     main_chunk = next(c for c in chunks if c.symbol_name == "main")
     
     usage_names = [u.name for u in main_chunk.usages]
@@ -113,22 +112,24 @@ function main() {
     user_usage = next(u for u in main_chunk.usages if u.name == "User")
     assert user_usage.context == "instantiation"
 
-def test_extract_dart_usages(parser, tmp_path):
+def test_extract_dart_usages(code_parser, tmp_path):
     code = """
 class Processor {
   @override
   void process() {
+    ref.watch(activeVisualThemeIdProvider);
     print('Processing');
     var data = fetchData();
     final user = User(name: 'Alice');
     final Widget w = MyWidget();
+    final note = Note.fromFirestore(doc);
   }
 }
 """
     f = tmp_path / "test.dart"
     f.write_text(code, encoding="utf-8")
     
-    chunks = parser.parse_file(str(f))
+    chunks = code_parser.parse_file(str(f))
     process_chunk = next(c for c in chunks if c.symbol_name == "process")
     
     usage_names = [u.name for u in process_chunk.usages]
@@ -137,3 +138,5 @@ class Processor {
     assert "User" in usage_names
     assert "MyWidget" in usage_names
     assert "Widget" in usage_names
+    assert "activeVisualThemeIdProvider" in usage_names
+    assert "fromFirestore" in usage_names

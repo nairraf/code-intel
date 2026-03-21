@@ -276,6 +276,31 @@ class StructuralStore:
         rows = conn.execute(query, params).fetchall()
         return [SymbolRecord(**dict(row)) for row in rows]
 
+    def find_qualified_symbols(
+        self,
+        project_root: str,
+        qualified_name: str,
+        filename: str | None = None,
+    ) -> list[SymbolRecord]:
+        if "." not in qualified_name:
+            return []
+
+        parent_symbol, symbol_name = qualified_name.rsplit(".", 1)
+        normalized_root = normalize_path(project_root)
+        conn = self._get_conn()
+        query = (
+            "SELECT project_root, symbol_id, filename, symbol_name, symbol_kind, language, "
+            "parent_symbol, start_line, end_line, signature FROM symbols "
+            "WHERE project_root = ? AND symbol_name = ? AND parent_symbol = ?"
+        )
+        params: list[object] = [normalized_root, symbol_name, parent_symbol.split(".")[-1]]
+        if filename is not None:
+            query += " AND filename = ?"
+            params.append(normalize_path(filename))
+        query += " ORDER BY filename, start_line, end_line"
+        rows = conn.execute(query, params).fetchall()
+        return [SymbolRecord(**dict(row)) for row in rows]
+
     def find_symbols(
         self,
         project_root: str,
@@ -404,6 +429,31 @@ class StructuralStore:
             f"WHERE project_root = ? AND target_symbol_id IN ({placeholders})"
         )
         params: list[object] = [normalized_root, *target_symbol_ids]
+        if edge_kind is not None:
+            query += " AND edge_kind = ?"
+            params.append(edge_kind)
+        query += " ORDER BY source_filename, target_filename, source_symbol_id"
+        rows = conn.execute(query, params).fetchall()
+        return [EdgeRecord(**dict(row)) for row in rows]
+
+    def list_outgoing_edges(
+        self,
+        project_root: str,
+        source_symbol_ids: list[str],
+        edge_kind: str | None = None,
+    ) -> list[EdgeRecord]:
+        if not source_symbol_ids:
+            return []
+
+        normalized_root = normalize_path(project_root)
+        placeholders = ", ".join("?" for _ in source_symbol_ids)
+        conn = self._get_conn()
+        query = (
+            "SELECT project_root, source_symbol_id, target_symbol_id, edge_kind, "
+            "source_filename, target_filename, metadata_json FROM edges "
+            f"WHERE project_root = ? AND source_symbol_id IN ({placeholders})"
+        )
+        params: list[object] = [normalized_root, *source_symbol_ids]
         if edge_kind is not None:
             query += " AND edge_kind = ?"
             params.append(edge_kind)

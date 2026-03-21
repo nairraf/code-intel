@@ -60,7 +60,7 @@ class DartScopingStrategy:
     def get_special_handling(self, node: Node) -> tuple[int, Node]:
         end_byte = node.end_byte
         usage_node = node
-        if node.type in ('function_signature', 'method_signature'):
+        if node.type in ('function_signature', 'method_signature', 'factory_constructor_signature'):
             sib = node.next_named_sibling
             if sib and sib.type == 'function_body':
                 end_byte = sib.end_byte

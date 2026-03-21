@@ -36,6 +36,86 @@ def fixture_impact_project(tmp_path):
         shutil.rmtree(project_root)
 
 
+@pytest.fixture(name="dart_impact_project")
+def fixture_dart_impact_project(tmp_path):
+    project_root = tmp_path / "dart_impact_project"
+    lib_dir = project_root / "lib"
+    test_dir = project_root / "test"
+    lib_dir.mkdir(parents=True)
+    test_dir.mkdir()
+
+    (lib_dir / "settings_screen.dart").write_text(
+        "class SettingsScreen {}\n",
+        encoding="utf-8",
+    )
+    (lib_dir / "user_menu_button.dart").write_text(
+        "import 'settings_screen.dart';\n\nclass UserMenuButton {\n  void openMenu() {\n    final screen = SettingsScreen();\n  }\n}\n",
+        encoding="utf-8",
+    )
+    (test_dir / "settings_screen_test.dart").write_text(
+        "import '../lib/settings_screen.dart';\n\nvoid main() {\n  final screen = SettingsScreen();\n}\n",
+        encoding="utf-8",
+    )
+    (lib_dir / "note.dart").write_text(
+        "class Note {\n  const Note();\n\n  factory Note.fromFirestore(Object doc) {\n    return const Note();\n  }\n}\n",
+        encoding="utf-8",
+    )
+    (lib_dir / "notes_repository.dart").write_text(
+        "import 'note.dart';\n\nclass NotesRepository {\n  Note load(Object doc) {\n    return Note.fromFirestore(doc);\n  }\n}\n",
+        encoding="utf-8",
+    )
+    (test_dir / "note_test.dart").write_text(
+        "import '../lib/note.dart';\n\nvoid main() {\n  final note = Note.fromFirestore(Object());\n}\n",
+        encoding="utf-8",
+    )
+    (lib_dir / "manual_highlighter_controller.dart").write_text(
+        "class ManualHighlighterController {}\n",
+        encoding="utf-8",
+    )
+    (lib_dir / "guided_validation_note_panel.dart").write_text(
+        "class GuidedValidationNotePanel {}\n",
+        encoding="utf-8",
+    )
+    (lib_dir / "guided_validation_screen.dart").write_text(
+        "import 'manual_highlighter_controller.dart';\n"
+        "import 'guided_validation_note_panel.dart';\n\n"
+        "class GuidedValidationScreen {\n"
+        "  _GuidedValidationScreenState createState() => _GuidedValidationScreenState();\n"
+        "}\n\n"
+        "class _GuidedValidationScreenState {\n"
+        "  late final ManualHighlighterController controller;\n\n"
+        "  _GuidedValidationScreenState() {\n"
+        "    controller = ManualHighlighterController();\n"
+        "  }\n\n"
+        "  GuidedValidationNotePanel build() {\n"
+        "    return GuidedValidationNotePanel();\n"
+        "  }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    (lib_dir / "note_detail_screen.dart").write_text(
+        "import 'guided_validation_screen.dart';\n\n"
+        "class NoteDetailScreen {\n"
+        "  void open() {\n"
+        "    final screen = GuidedValidationScreen();\n"
+        "    screen.createState().build();\n"
+        "  }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    (test_dir / "guided_validation_screen_test.dart").write_text(
+        "import '../lib/guided_validation_screen.dart';\n\n"
+        "void main() {\n"
+        "  final screen = GuidedValidationScreen();\n"
+        "  screen.createState().build();\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    yield project_root
+    if project_root.exists():
+        shutil.rmtree(project_root)
+
+
 @pytest.mark.asyncio
 async def test_impact_analysis_finds_affected_files_symbols_and_tests(impact_project, tmp_path):
     structural_store = StructuralStore(str(tmp_path / "impact.sqlite"))
@@ -132,3 +212,62 @@ async def test_impact_analysis_accepts_patch_text_inputs(impact_project, tmp_pat
     assert result["status"] == "ok"
     assert any(item["symbol"] == "MyService" for item in result["affectedSymbols"])
     assert any("Patch text was parsed heuristically" in warning for warning in result["warnings"])
+
+@pytest.mark.asyncio
+async def test_impact_analysis_resolves_dart_imported_symbols_and_exact_tests(dart_impact_project, tmp_path):
+    structural_store = StructuralStore(str(tmp_path / "dart_impact.sqlite"))
+    structural_refresher = StructuralRefresher(structural_store, CodeParser())
+
+    with patch("src.context._context.structural_store", structural_store),          patch("src.context._context.structural_refresher", structural_refresher):
+        await refresh_index.fn(root_path=str(dart_impact_project), force_full_scan=True)
+        result = await impact_analysis.fn(
+            root_path=str(dart_impact_project),
+            changed_symbols=["SettingsScreen"],
+            include_tests=True,
+        )
+
+    assert result["status"] == "ok"
+    assert any(item["file"].endswith("user_menu_button.dart") for item in result["affectedFiles"])
+    assert any(test["file"].endswith("settings_screen_test.dart") for test in result["candidateTests"])
+    assert any(test["confidence"] == "exact" for test in result["candidateTests"])
+
+
+@pytest.mark.asyncio
+async def test_impact_analysis_resolves_qualified_dart_factory_symbols(dart_impact_project, tmp_path):
+    structural_store = StructuralStore(str(tmp_path / "dart_factory.sqlite"))
+    structural_refresher = StructuralRefresher(structural_store, CodeParser())
+
+    with patch("src.context._context.structural_store", structural_store),          patch("src.context._context.structural_refresher", structural_refresher):
+        await refresh_index.fn(root_path=str(dart_impact_project), force_full_scan=True)
+        result = await impact_analysis.fn(
+            root_path=str(dart_impact_project),
+            changed_symbols=["Note.fromFirestore"],
+            include_tests=True,
+        )
+
+    assert result["status"] == "ok"
+    assert any(item["file"].endswith("notes_repository.dart") for item in result["affectedFiles"])
+    assert any(item["symbol"] == "fromFirestore" for item in result["affectedSymbols"])
+    assert any(test["file"].endswith("note_test.dart") for test in result["candidateTests"])
+
+
+@pytest.mark.asyncio
+async def test_impact_analysis_includes_direct_component_collaborators_for_dart_symbols(dart_impact_project, tmp_path):
+    structural_store = StructuralStore(str(tmp_path / "dart_component.sqlite"))
+    structural_refresher = StructuralRefresher(structural_store, CodeParser())
+
+    with patch("src.context._context.structural_store", structural_store), \
+         patch("src.context._context.structural_refresher", structural_refresher):
+        await refresh_index.fn(root_path=str(dart_impact_project), force_full_scan=True)
+        result = await impact_analysis.fn(
+            root_path=str(dart_impact_project),
+            changed_symbols=["GuidedValidationScreen"],
+            include_tests=True,
+        )
+
+    assert result["status"] == "ok"
+    assert any(item["file"].endswith("note_detail_screen.dart") for item in result["affectedFiles"])
+    assert any(item["file"].endswith("manual_highlighter_controller.dart") for item in result["affectedFiles"])
+    assert any(item["file"].endswith("guided_validation_note_panel.dart") for item in result["affectedFiles"])
+    assert any(item["symbol"] == "ManualHighlighterController" for item in result["affectedSymbols"])
+    assert any(test["file"].endswith("guided_validation_screen_test.dart") for test in result["candidateTests"])

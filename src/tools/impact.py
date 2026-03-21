@@ -122,6 +122,58 @@ def _candidate_tests(
     return [payload for _, payload in ordered[:max_results]]
 
 
+def _find_changed_symbol_records(ctx, project_root: str, symbol_name: str):
+    symbol_records = ctx.structural_store.find_symbols(project_root, symbol_name)
+    if symbol_records or "." not in symbol_name:
+        return symbol_records
+    return ctx.structural_store.find_qualified_symbols(project_root, symbol_name)
+
+
+def _shared_path_prefix_length(left: str, right: str) -> int:
+    left_parts = Path(left.replace("\\", "/")).parts[:-1]
+    right_parts = Path(right.replace("\\", "/")).parts[:-1]
+    shared = 0
+    for left_part, right_part in zip(left_parts, right_parts):
+        if left_part != right_part:
+            break
+        shared += 1
+    return shared
+
+
+def _boost_sort_score(payload: dict, score: int) -> None:
+    payload["_sort_score"] = max(int(payload.get("_sort_score", 0)), score)
+
+
+def _collect_component_seed_symbol_ids(ctx, project_root: str, symbol_records) -> set[str]:
+    seed_symbol_ids: set[str] = set()
+    inspected_files: set[str] = set()
+
+    for record in symbol_records:
+        if record.filename in inspected_files or not is_concrete_definition_kind(record.symbol_kind):
+            continue
+        inspected_files.add(record.filename)
+        file_symbols = [
+            file_record
+            for file_record in ctx.structural_store.list_symbols(project_root, record.filename)
+            if is_concrete_definition_kind(file_record.symbol_kind)
+        ]
+        public_top_level = [
+            file_record
+            for file_record in file_symbols
+            if not file_record.parent_symbol and not file_record.symbol_name.startswith("_")
+        ]
+        if len(public_top_level) != 1:
+            continue
+
+        component_symbol = public_top_level[0]
+        if record.symbol_id != component_symbol.symbol_id and record.parent_symbol != component_symbol.symbol_name:
+            continue
+
+        seed_symbol_ids.update(file_record.symbol_id for file_record in file_symbols)
+
+    return seed_symbol_ids
+
+
 async def impact_analysis_impl(
     root_path: str,
     ctx,
@@ -155,6 +207,7 @@ async def impact_analysis_impl(
                 "file": record.filename,
                 "confidence": "exact",
                 "reasons": ["definition file changed"],
+                "_sort_score": 500,
                 "evidence": [
                     {
                         "kind": "heuristic",
@@ -166,8 +219,10 @@ async def impact_analysis_impl(
                 ],
             }
 
+    component_seed_symbol_ids: set[str] = set()
     for symbol_name in normalized_changed_symbols:
-        symbol_records = ctx.structural_store.find_symbols(project_root, symbol_name)
+        symbol_records = _find_changed_symbol_records(ctx, project_root, symbol_name)
+        component_seed_symbol_ids.update(_collect_component_seed_symbol_ids(ctx, project_root, symbol_records))
         concrete_records = [record for record in symbol_records if is_concrete_definition_kind(record.symbol_kind)]
         for record in concrete_records or symbol_records:
             payload = affected_symbols_map.setdefault(
@@ -177,9 +232,11 @@ async def impact_analysis_impl(
                     "file": record.filename,
                     "confidence": "exact",
                     "reasons": [],
+                    "_sort_score": 400,
                     "evidence": [],
                 },
             )
+            _boost_sort_score(payload, 400)
             payload["reasons"].append("symbol explicitly marked changed")
             payload["evidence"].append(
                 {
@@ -197,6 +254,7 @@ async def impact_analysis_impl(
             "file": filename,
             "confidence": "exact",
             "reasons": ["file changed"],
+            "_sort_score": 500,
             "evidence": [],
         }
 
@@ -230,9 +288,11 @@ async def impact_analysis_impl(
                 "file": edge.source_filename,
                 "confidence": confidence,
                 "reasons": [],
+                "_sort_score": 0,
                 "evidence": [],
             },
         )
+        _boost_sort_score(payload, 300 if confidence == "exact" else 250)
         if edge.source_filename not in changed_file_set or reason not in payload["reasons"]:
             payload["reasons"].append(reason)
         payload["evidence"].append(
@@ -245,15 +305,107 @@ async def impact_analysis_impl(
             }
         )
 
+    outgoing_edges = ctx.structural_store.list_outgoing_edges(
+        project_root,
+        list(component_seed_symbol_ids),
+        edge_kind="call",
+    )
+    collaborator_evidence: set[tuple[str, int, str, str]] = set()
+    source_symbol_cache: dict[str, object] = {}
+    changed_component_files: set[str] = set()
+    for symbol_id in component_seed_symbol_ids:
+        source_record = source_symbol_cache.get(symbol_id)
+        if source_record is None:
+            source_record = ctx.structural_store.get_symbol_by_id(project_root, symbol_id)
+            source_symbol_cache[symbol_id] = source_record
+        if source_record is not None:
+            changed_component_files.add(source_record.filename)
+
+    for edge in outgoing_edges:
+        metadata = parse_edge_metadata(edge)
+        match_type = metadata.get("match_type", "exact")
+        if edge.target_filename in changed_file_set:
+            continue
+        if match_type == "local_symbol" and edge.source_filename == edge.target_filename:
+            continue
+
+        target_symbol = ctx.structural_store.get_symbol_by_id(project_root, edge.target_symbol_id)
+        if target_symbol is None or not is_concrete_definition_kind(target_symbol.symbol_kind):
+            continue
+
+        line_number = int(metadata.get("line", 0) or 0)
+        evidence_key = (edge.target_filename, line_number, edge.target_symbol_id, match_type)
+        if evidence_key in collaborator_evidence:
+            continue
+        collaborator_evidence.add(evidence_key)
+
+        confidence = edge_confidence(match_type)
+        source_distance = max(
+            (_shared_path_prefix_length(source_file, edge.target_filename) for source_file in changed_component_files),
+            default=0,
+        )
+        collaborator_score = 200 + min(source_distance, 25)
+
+        symbol_payload = affected_symbols_map.setdefault(
+            target_symbol.symbol_id,
+            {
+                "symbol": target_symbol.symbol_name,
+                "file": target_symbol.filename,
+                "confidence": confidence,
+                "reasons": [],
+                "_sort_score": 0,
+                "evidence": [],
+            },
+        )
+        _boost_sort_score(symbol_payload, collaborator_score)
+        symbol_payload["reasons"].append("used directly by changed component")
+        symbol_payload["evidence"].append(
+            {
+                "kind": metadata.get("context", edge.edge_kind),
+                "reason": "Direct structural collaborator of the changed component.",
+                "source": edge.source_filename,
+                "line": line_number,
+                "confidence": confidence,
+            }
+        )
+
+        file_payload = affected_files_map.setdefault(
+            edge.target_filename,
+            {
+                "file": edge.target_filename,
+                "confidence": confidence,
+                "reasons": [],
+                "_sort_score": 0,
+                "evidence": [],
+            },
+        )
+        _boost_sort_score(file_payload, collaborator_score)
+        file_payload["reasons"].append(
+            f"used directly by changed component {target_symbol.symbol_name}"
+        )
+        file_payload["evidence"].append(
+            {
+                "kind": metadata.get("context", edge.edge_kind),
+                "reason": "Direct structural collaborator of the changed component.",
+                "source": edge.source_filename,
+                "line": line_number,
+                "confidence": confidence,
+            }
+        )
+
     affected_symbols = list(affected_symbols_map.values())
     for payload in affected_symbols:
         payload["reasons"] = sorted(set(payload["reasons"]))
-    affected_symbols.sort(key=lambda item: (item["file"], item["symbol"]))
+    affected_symbols.sort(key=lambda item: (-int(item.get("_sort_score", 0)), item["file"], item["symbol"]))
+    for payload in affected_symbols:
+        payload.pop("_sort_score", None)
 
     affected_files = list(affected_files_map.values())
     for payload in affected_files:
         payload["reasons"] = sorted(set(payload["reasons"]))
-    affected_files.sort(key=lambda item: (item["file"]))
+    affected_files.sort(key=lambda item: (-int(item.get("_sort_score", 0)), item["file"]))
+    for payload in affected_files:
+        payload.pop("_sort_score", None)
     affected_files = affected_files[:max_results]
     affected_symbols = affected_symbols[:max_results]
 
