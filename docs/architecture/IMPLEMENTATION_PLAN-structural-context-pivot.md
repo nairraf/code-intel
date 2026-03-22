@@ -40,11 +40,36 @@
 ## Phase 6: Agent-Facing Tooling Rebuild
 - [Architect] Finalize the `inspect_symbol` and `impact_analysis` contracts with explicit inputs, outputs, confidence semantics, and evidence fields.
 - [Architect] Finalize the `get_index_status` contract for structural freshness, capability state, and trust limitations.
+- [Architect] Narrow the immediate reboot goal so `get_stats` becomes the primary hotspot tool for large files, large symbols, import hubs, threshold violations, and test gaps.
 - [SeniorDev] Implement `inspect_symbol` directly on structural-core facts.
 - [SeniorDev] Implement `get_index_status` directly on structural-core refresh and capability state.
 - [SeniorDev] Implement `impact_analysis` on structural-core edges and imports.
+- [SeniorDev] Reduce refresh hot-path overhead in path normalization, symbol lookup, and import resolution before widening any richer analysis scope.
+- [SeniorDev] Expand `get_stats` to report hotspot metrics and simple refactor-candidate ranking from cheap structural facts.
 - [SeniorDev] Keep output explainable by attaching reasons and evidence for every affected file, symbol, or test candidate.
 - [Dev] Add end-to-end tests and benchmark scenarios showing the new tools provide better first-pass guidance than raw search alone.
+
+## Phase 6A: Trust And Scope Tightening
+- [Architect] Lock the next accepted scope to four trust-first items: language-aware candidate-test filtering, structural-first test ranking, `get_stats` scope controls, and a tiny Selos regression slice.
+- [Architect] Explicitly defer broad framework-aware inference, confidence-heavy explanation systems, and any richer enrichment that would expand the refresh hot path.
+- [Architect] Narrow Python impact improvements to explicit import-to-call propagation, simple provider or factory edges, and only syntactically direct `Depends(...)` handling where it remains cheap and exact enough.
+- [SeniorDev] Constrain candidate-test suggestions by language and nearest source root before any looser filename heuristics are considered.
+- [SeniorDev] Re-rank candidate tests so structural evidence wins before folder proximity or filename similarity.
+- [SeniorDev] Add `get_stats` scope controls for `code`, `tests`, and `all`, plus optional include or exclude globs and root filters.
+- [SeniorDev] Improve Python downstream edges only for bounded structural patterns that do not require broad framework inference.
+- [Dev] Add a tiny Selos regression slice covering `GradientScaffold`, `NotesRepository`, `activeVisualThemeIdProvider`, and `verify_firebase_token`.
+
+## Accepted Scope For The Next Slice
+- [Architect] Keep `refresh_index` cheap and unchanged in principle; no new default-path semantic or framework-aware work.
+- [Architect] Improve trust and actionability in `impact_analysis` through language-aware filtering and structural-first ranking.
+- [Architect] Improve `get_stats` through source and test scoping rather than more global ranking logic.
+- [SeniorDev] Limit Python edge improvements to narrow explicit patterns that can stay on the structural side of the reboot thesis.
+
+## Explicitly Deferred Scope
+- [Architect] Defer broad FastAPI dependency-injection inference beyond direct obvious forms.
+- [Architect] Defer framework-aware graph semantics that require custom confidence systems.
+- [Architect] Defer anything that materially increases refresh cost or adds whole-repository expensive analysis.
+- [Architect] Defer any attempt to make the tool generally "smart" again before the stats-first trust fixes prove themselves.
 
 ## Phase 7: Optional Rich Enrichment
 - [Architect] Revisit whether `enrich_analysis` is still worth building after the structural-only core proves itself.
@@ -53,6 +78,7 @@
 
 ## Phase 8: Validation And Decision
 - [SeniorDev] Re-run benchmarks on `selos` and compare full refresh, partial refresh, and trust-recovery behavior against baseline.
+- [SeniorDev] Verify whether the narrowed stats-first path can hold full refresh below the 30 second target on medium repositories.
 - [SeniorDev] Perform an explicit security reasoning pass over the new invalidation, manifest, storage-split, and impact-analysis logic before merge consideration.
 - [Architect] Summarize the branch outcome as one of: continue investment, keep as a narrow internal tool, or stop the pivot.
 - [Dev] If the branch passes the decision gate, align `README.md`, `docs/PROJECT_PLAN.md`, and `docs/PROGRESS.md` with the benchmark-backed positioning.

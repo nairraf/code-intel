@@ -30,18 +30,28 @@ async def test_get_detailed_stats_enhancements():
             files_skipped=7,
         ),
     }
+    mock_ctx.structural_store.list_tracked_files.return_value = []
+    mock_ctx.structural_store.list_symbols.return_value = []
+    mock_ctx.structural_store.list_imports.return_value = []
 
     with patch('src.tools.stats.get_active_branch', return_value="feat/new-feature"), \
-         patch('src.tools.stats.check_git_dirty', return_value=True):
+         patch('src.tools.stats.build_freshness', return_value=({
+             "projectRoot": project_root,
+             "structuralState": "current",
+             "workspaceState": "dirty",
+             "enrichmentState": "disabled",
+             "lastStructuralRefreshAt": "2026-03-05T10:00:00Z",
+             "lastEnrichmentAt": None,
+             "scope": {"include": None, "exclude": None},
+             "warnings": ["Repository has uncommitted changes since the last structural refresh."],
+         }, ["Repository has uncommitted changes since the last structural refresh."])):
          
         result = await get_stats_impl(project_root, ctx=mock_ctx)
 
-        assert "Dependency Hubs" in result
-        assert "utils (10 imports)" in result
-        assert "Project Pulse:" in result
-        assert "Active Branch:   feat/new-feature" in result
-        assert "Structural State: DIRTY" in result
-        assert "Files Changed:   3" in result
+        assert result["status"] == "ok"
+        assert result["projectPulse"]["activeBranch"] == "feat/new-feature"
+        assert result["projectPulse"]["lastScanType"] == "full"
+        assert result["warnings"] == ["Repository has uncommitted changes since the last structural refresh."]
 
 
 @pytest.mark.asyncio

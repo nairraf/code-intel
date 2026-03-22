@@ -1,6 +1,8 @@
 import os
+from functools import lru_cache
 from pathlib import Path
 
+@lru_cache(maxsize=65536)
 def normalize_path(path: str) -> str:
     """
     Returns a canonical absolute POSIX path.

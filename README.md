@@ -8,7 +8,7 @@
 
 This feature branch is a reboot of `code-intel`.
 
-The old direction emphasized broad semantic retrieval. The reboot treats `code-intel` as a structural context service for coding agents: something that should help an agent identify risky areas, understand dependency structure, estimate blast radius, and decide what to read or test next.
+The old direction emphasized broad semantic retrieval. The reboot treats `code-intel` as a structural context service for coding agents, with the current pass narrowed further toward fast hotspot reporting: something that should help an agent identify risky areas, understand dependency structure, and decide what to read or test next without expensive analysis.
 
 This branch is intentionally being tracked as a separate direction. Planning, progress, and milestone reporting in this branch now describe the reboot rather than the legacy roadmap.
 
@@ -25,9 +25,10 @@ The working thesis is simple:
 Examples:
 
 - what parts of this repo are risky to change?
-- what files or symbols are dependency hubs?
-- what is likely affected by this patch or refactor?
-- what tests are the best candidates to run next?
+- what files or symbols are unusually large?
+- what files are import hubs?
+- what files look under-tested for their size?
+- what should be considered for refactoring first?
 
 ## Reboot Goals
 
@@ -36,7 +37,7 @@ The branch succeeds only if it proves these five things:
 1. partial refresh becomes cheap enough to run often
 2. incremental graph state stays trustworthy during common refactors
 3. structural tools remain useful even when embeddings are slow or unavailable
-4. impact analysis gives agents better first-pass guidance than raw search alone
+4. hotspot stats give agents better first-pass guidance than raw search alone
 5. the implementation stays above the repository quality gate
 
 ## Non-Goals For This Branch
@@ -61,8 +62,8 @@ The reboot now centers on a smaller core:
 1. structural-only refresh
 2. cheap incremental refresh
 3. exact symbol and import persistence
-4. structural stats and trust reporting
-5. reboot-native symbol inspection and impact analysis on the new core
+4. hotspot stats and trust reporting
+5. optional deeper structural inspection only after the fast path proves itself
 
 ## Technical Direction
 
@@ -139,8 +140,8 @@ uv run python -m src.server
 This branch is in reboot mode.
 
 - branch of record: `feature/structural-context-pivot`
-- current phase: external validation and reboot decision evidence
-- next implementation target: turn `selos` validation into decision-quality follow-through on trust, ranking, and scope
+- current phase: stats-first narrowing pass
+- next implementation target: turn the structural core into a fast hotspot utility with better stats depth and lower refresh cost
 
 The legacy runtime is no longer the implementation base for the default path on this branch. New work is expected to land on the structural core only.
 

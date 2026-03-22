@@ -111,17 +111,27 @@ async def search_code(
 
 
 @mcp.tool()
-async def get_stats(root_path: str) -> str:
+async def get_stats(
+    root_path: str,
+    view: str = "code",
+    include: str = None,
+    exclude: str = None,
+    roots: list[str] = None,
+) -> dict:
     """
-    Provides a high-level architectural overview and health report.
+    Provides a structural hotspot report for the indexed repository.
 
-    Best for: Checking project health, finding high-risk symbols, or identifying dependency hubs.
+    Best for: Finding large files, large symbols, import hubs, threshold violations, and test-gap candidates.
 
     Args:
         root_path: MUST be the absolute path to the active workspace project root. NEVER use '.' or relative paths.
+        view: One of 'code', 'tests', or 'all'. Defaults to 'code'.
+        include: Optional glob matched against project-relative paths.
+        exclude: Optional glob matched against project-relative paths.
+        roots: Optional list of top-level roots to limit the hotspot view.
     """
     norm_root = normalize_path(root_path)
-    return await get_stats_impl(norm_root, _get_ctx())
+    return await get_stats_impl(norm_root, _get_ctx(), view=view, include=include, exclude=exclude, roots=roots)
 
 
 @mcp.tool()

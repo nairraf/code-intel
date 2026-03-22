@@ -17,8 +17,10 @@ from src.structural_core.store import StructuralStore
 def fixture_impact_project(tmp_path):
     project_root = tmp_path / "impact_project"
     tests_dir = project_root / "tests"
+    dart_test_dir = project_root / "test"
     project_root.mkdir()
     tests_dir.mkdir()
+    dart_test_dir.mkdir()
     (project_root / "service.py").write_text(
         "class MyService:\n    def do_work(self):\n        return 'ok'\n",
         encoding="utf-8",
@@ -31,6 +33,14 @@ def fixture_impact_project(tmp_path):
         "from service import MyService\n\ndef test_service():\n    assert MyService().do_work() == 'ok'\n",
         encoding="utf-8",
     )
+    (tests_dir / "test_service_helpers.py").write_text(
+        "def test_service_helpers_smoke():\n    assert True\n",
+        encoding="utf-8",
+    )
+    (dart_test_dir / "service_widget_test.dart").write_text(
+        "void main() {}\n",
+        encoding="utf-8",
+    )
     yield project_root
     if project_root.exists():
         shutil.rmtree(project_root)
@@ -41,8 +51,10 @@ def fixture_dart_impact_project(tmp_path):
     project_root = tmp_path / "dart_impact_project"
     lib_dir = project_root / "lib"
     test_dir = project_root / "test"
+    py_test_dir = project_root / "tests"
     lib_dir.mkdir(parents=True)
     test_dir.mkdir()
+    py_test_dir.mkdir()
 
     (lib_dir / "settings_screen.dart").write_text(
         "class SettingsScreen {}\n",
@@ -54,6 +66,10 @@ def fixture_dart_impact_project(tmp_path):
     )
     (test_dir / "settings_screen_test.dart").write_text(
         "import '../lib/settings_screen.dart';\n\nvoid main() {\n  final screen = SettingsScreen();\n}\n",
+        encoding="utf-8",
+    )
+    (py_test_dir / "test_settings_screen.py").write_text(
+        "def test_settings_screen_smoke():\n    assert True\n",
         encoding="utf-8",
     )
     (lib_dir / "note.dart").write_text(
@@ -190,6 +206,7 @@ async def test_impact_analysis_finds_affected_files_symbols_and_tests(impact_pro
     assert len(result["candidateTests"]) == 1
     assert any(test["confidence"] == "exact" for test in result["candidateTests"])
     assert any("structural dependency on changed symbol" in test["reasons"] for test in result["candidateTests"])
+    assert all(test["file"].endswith(".py") for test in result["candidateTests"])
 
 
 @pytest.mark.asyncio
@@ -280,6 +297,47 @@ async def test_impact_analysis_resolves_dart_imported_symbols_and_exact_tests(da
     assert any(item["file"].endswith("user_menu_button.dart") for item in result["affectedFiles"])
     assert any(test["file"].endswith("settings_screen_test.dart") for test in result["candidateTests"])
     assert any(test["confidence"] == "exact" for test in result["candidateTests"])
+    assert all(test["file"].endswith(".dart") for test in result["candidateTests"])
+
+
+@pytest.mark.asyncio
+async def test_impact_analysis_ranks_structural_python_tests_before_heuristics(impact_project, tmp_path):
+    structural_store = StructuralStore(str(tmp_path / "impact_python_ranking.sqlite"))
+    structural_refresher = StructuralRefresher(structural_store, CodeParser())
+
+    with patch("src.context._context.structural_store", structural_store), \
+         patch("src.context._context.structural_refresher", structural_refresher):
+        await refresh_index.fn(root_path=str(impact_project), force_full_scan=True)
+        result = await impact_analysis.fn(
+            root_path=str(impact_project),
+            changed_files=[str(impact_project / "service.py")],
+            include_tests=True,
+        )
+
+    assert result["status"] == "ok"
+    assert result["candidateTests"]
+    assert result["candidateTests"][0]["file"].endswith("test_service.py")
+    assert "structural dependency on changed symbol" in result["candidateTests"][0]["reasons"]
+    assert not any(test["file"].endswith("service_widget_test.dart") for test in result["candidateTests"])
+
+
+@pytest.mark.asyncio
+async def test_impact_analysis_filters_cross_language_tests_for_dart_symbols(dart_impact_project, tmp_path):
+    structural_store = StructuralStore(str(tmp_path / "dart_language_filter.sqlite"))
+    structural_refresher = StructuralRefresher(structural_store, CodeParser())
+
+    with patch("src.context._context.structural_store", structural_store), \
+         patch("src.context._context.structural_refresher", structural_refresher):
+        await refresh_index.fn(root_path=str(dart_impact_project), force_full_scan=True)
+        result = await impact_analysis.fn(
+            root_path=str(dart_impact_project),
+            changed_symbols=["SettingsScreen"],
+            include_tests=True,
+        )
+
+    assert result["status"] == "ok"
+    assert result["candidateTests"]
+    assert all(test["file"].endswith(".dart") for test in result["candidateTests"])
 
 
 @pytest.mark.asyncio

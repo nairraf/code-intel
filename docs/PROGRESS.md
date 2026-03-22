@@ -8,9 +8,9 @@
 
 ## Current Stage
 
-We are in external validation and reboot decision shaping.
+We are in the stats-first narrowing pass.
 
-The branch now has a structural-only default runtime plus the first reboot-native trust and analysis tools running live on the new core. Initial validation on `selos` now says the core is practical enough to keep evaluating. The next question is narrower: whether the reboot earns continued investment after follow-through on ranking quality, trust messaging, and broader real-agent usefulness.
+The branch already proved that the structural-only runtime can rebuild quickly enough to stay alive as a reboot candidate. The next pass is stricter: optimize for fast refresh plus hotspot stats before spending more time on deeper inspection or impact workflows.
 
 ## What Has Been Reset
 
@@ -29,7 +29,7 @@ The branch will be judged on whether it improves these practical outcomes:
 
 1. refresh cost during active work
 2. trustworthiness of graph state during refactors
-3. usefulness of structural insight for agent decisions
+3. usefulness of hotspot stats for agent decisions
 
 ## Reboot Status By Milestone
 
@@ -91,20 +91,23 @@ The branch will be judged on whether it improves these practical outcomes:
   - [x] `inspect_symbol` implemented on the structural core
   - [x] regression coverage added for structural-only operation
 
-### Milestone R4: Agent-Facing Tooling
+### Milestone R4: Stats-First Hotspot Tooling
 - **Status:** In progress
 - **Completed:**
-  - [x] `inspect_symbol` implemented on structural-core definitions and incoming edges
-  - [x] `impact_analysis` implemented on structural-core symbols, edges, and tracked-file heuristics
-  - [x] explainable reasons and confidence labels returned for affected files, symbols, and candidate tests
   - [x] `get_index_status` implemented on structural-core freshness and capability state
-  - [x] live MCP validation completed for `inspect_symbol`, `impact_analysis`, and `get_index_status` on this repository
-  - [x] `impact_analysis` ranking tightened to reduce same-file file noise, heuristic test spillover, and changed-file symbol noise
+  - [x] live MCP validation completed for the structural-core runtime on this repository
   - [x] dirty workspaces now report usable structural freshness with explicit warnings instead of generic stale status immediately after a successful rebuild
-  - [x] disabled legacy wrappers are now hidden from MCP discovery so the exposed tool catalog matches the branch reality
   - [x] initial external validation on `selos` confirmed practical rebuild speed plus useful structural output in Dart, Python, and Firestore
 - **Remaining:**
-  - [ ] improve broader real-agent usefulness, especially Dart or Flutter impact depth and test candidate quality
+  - [x] expand `get_stats` into a hotspot report covering large files, large symbols, import hubs, threshold violations, and test gaps
+  - [x] split default hotspot ranking into code-like files with separate non-code large-file reporting
+  - [ ] reduce additional refresh overhead in the exact-linking path so rebuilds stay close to the 30 second target
+  - [ ] add simple refactor-candidate scoring from cheap structural metrics
+  - [x] add language-aware candidate-test filtering so Dart and Python results stop cross-suggesting tests
+  - [x] rank candidate tests by structural evidence before filename heuristics
+  - [x] add explicit `get_stats` scope controls for code, tests, and all views
+  - [ ] improve Python downstream impact only for narrow explicit structural patterns
+  - [ ] pin the named Selos utility cases in a tiny regression slice
 
 ### Milestone R5: Scoped Rich Enrichment
 - **Status:** Not started
@@ -151,9 +154,23 @@ Interpretation:
 
 ## Immediate Next Steps
 
-- [ ] deepen `selos` follow-up on Dart or Flutter impact depth and test candidate quality
-- [ ] capture before-and-after evidence for the reboot decision gate
-- [ ] write the security reasoning and trust summary for the new structural core logic
+- [ ] add `get_stats` view and scope controls so source, tests, and non-code artifacts can be inspected separately
+- [ ] add the tiny Selos regression slice before attempting narrow Python downstream-edge improvements
+- [ ] land narrow Python downstream-edge work only after the smaller trust and regression items are pinned
+- [ ] write the security reasoning and trust summary for the narrowed stats-first core
+
+## Accepted Next Scope
+
+- trust-first candidate-test filtering and ranking
+- `get_stats` scope controls
+- tiny Selos regression coverage
+- narrow Python downstream-edge work limited to explicit imports, simple providers, and direct `Depends(...)` forms
+
+## Explicitly Deferred Next Scope
+
+- broad framework-aware dependency-injection inference
+- confidence-heavy explanation systems
+- any richer analysis that expands refresh cost or whole-repo default work
 
 ## Preferred Technical Direction
 
@@ -162,7 +179,7 @@ The current preferred direction is:
 - SQLite-backed structural authority
 - optional LanceDB-backed semantic retrieval
 - explicit trust and freshness signals
-- primary tools designed around agent jobs rather than internal pipeline stages
+- primary value delivered through fast hotspot stats rather than broad analysis depth
 
 ## Decision Gate
 

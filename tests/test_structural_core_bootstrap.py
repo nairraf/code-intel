@@ -143,6 +143,7 @@ def test_structural_refresher_persists_exact_symbols_and_imports(tmp_path):
     assert any(symbol.symbol_name == "main" for symbol in symbols)
     assert any(record.import_text == "service" for record in imports)
     assert any(record.import_text == "service::MyService" for record in imports)
+    assert any(record.resolved_path == normalize_path(str(project_root / "service.py")) for record in imports)
 
     edges = store.list_edges(str(project_root), source_filename=str(app_file))
     assert any(edge.target_filename == normalize_path(str(project_root / "service.py")) for edge in edges)

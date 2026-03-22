@@ -12,6 +12,19 @@ from .structural_common import (
 from ..utils import normalize_path
 
 
+_TEST_NAME_TOKENS = {"test", "tests", "spec"}
+_LANGUAGE_BY_SUFFIX = {
+    ".py": "python",
+    ".dart": "dart",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+}
+_SOURCE_ROOT_MARKERS = {"lib", "src", "app", "backend", "api"}
+_TEST_ROOT_MARKERS = {"test", "tests"}
+
+
 def _normalize_input_files(project_root: str, changed_files: list[str] | None) -> list[str]:
     if not changed_files:
         return []
@@ -54,6 +67,8 @@ def _extract_inputs_from_patch(project_root: str, patch_text: str | None) -> tup
 
 
 def _candidate_tests(
+    ctx,
+    project_root: str,
     tracked_files: list[str],
     affected_files: list[dict],
     affected_symbols: list[dict],
@@ -63,14 +78,39 @@ def _candidate_tests(
     if not tests:
         return []
 
+    affected_source_files = sorted(
+        {
+            payload["file"]
+            for payload in affected_files
+            if not is_test_file(payload["file"])
+        }
+        | {
+            payload["file"]
+            for payload in affected_symbols
+            if not is_test_file(payload["file"])
+        }
+    )
+    affected_symbol_names = {payload["symbol"] for payload in affected_symbols}
+    source_languages = {
+        language
+        for language in (_file_language(file_path) for file_path in affected_source_files)
+        if language is not None
+    }
+    if source_languages:
+        tests = [filename for filename in tests if _file_language(filename) in source_languages]
+    if not tests:
+        return []
+
     ranked: dict[str, tuple[int, dict]] = {}
 
     for affected_file in affected_files:
         test_file = affected_file["file"]
         if not is_test_file(test_file):
             continue
+        if source_languages and _file_language(test_file) not in source_languages:
+            continue
         ranked[test_file] = (
-            100,
+            1000,
             {
                 "file": test_file,
                 "confidence": affected_file["confidence"],
@@ -79,8 +119,101 @@ def _candidate_tests(
             },
         )
 
-    if ranked:
+    imports_by_test: dict[str, list] = {
+        test_file: ctx.structural_store.list_imports(project_root, test_file)
+        for test_file in tests
+    }
+    feature_tokens_by_source = {
+        file_path: _feature_tokens(file_path)
+        for file_path in affected_source_files
+    }
+
+    structural_found = bool(ranked)
+    for test_file in tests:
+        if test_file in ranked:
+            continue
+
+        imports = imports_by_test[test_file]
+        resolved_targets = {record.resolved_path for record in imports if record.resolved_path}
+        imported_symbols = {
+            record.import_text.split("::", 1)[1]
+            for record in imports
+            if "::" in record.import_text
+        }
+
+        reasons: list[str] = []
+        evidence: list[dict] = []
+        score = 0
+
+        matching_files = sorted(target for target in resolved_targets if target in affected_source_files)
+        if matching_files:
+            structural_found = True
+            score = max(score, 800)
+            reasons.append("explicit import of affected file")
+            evidence.extend(
+                {
+                    "kind": "import",
+                    "reason": "Test imports an affected file directly.",
+                    "source": test_file,
+                    "line": 0,
+                    "confidence": "high",
+                }
+                for _ in matching_files[:1]
+            )
+
+        matching_symbols = sorted(symbol for symbol in imported_symbols if symbol in affected_symbol_names)
+        if matching_symbols:
+            structural_found = True
+            score = max(score, 780)
+            reasons.append("explicit import of affected symbol")
+            evidence.extend(
+                {
+                    "kind": "import",
+                    "reason": f"Test imports affected symbol {symbol_name} directly.",
+                    "source": test_file,
+                    "line": 0,
+                    "confidence": "high",
+                }
+                for symbol_name in matching_symbols[:1]
+            )
+
+        if score > 0:
+            ranked[test_file] = (
+                score,
+                {
+                    "file": test_file,
+                    "confidence": "high",
+                    "reasons": sorted(set(reasons)),
+                    "evidence": evidence,
+                },
+            )
+
+    if structural_found:
         ordered = sorted(ranked.values(), key=lambda item: (-item[0], item[1]["file"]))
+        return [payload for _, payload in ordered[:max_results]]
+
+    proximity_ranked: dict[str, tuple[int, dict]] = {}
+    for test_file in tests:
+        test_tokens = _feature_tokens(test_file)
+        best_overlap = 0
+        for source_tokens in feature_tokens_by_source.values():
+            best_overlap = max(best_overlap, len(test_tokens & source_tokens))
+        if best_overlap == 0:
+            continue
+
+        score = 300 + (best_overlap * 10)
+        proximity_ranked[test_file] = (
+            score,
+            {
+                "file": test_file,
+                "confidence": "medium",
+                "reasons": ["same-feature folder proximity"],
+                "evidence": [],
+            },
+        )
+
+    if proximity_ranked:
+        ordered = sorted(proximity_ranked.values(), key=lambda item: (-item[0], item[1]["file"]))
         return [payload for _, payload in ordered[:max_results]]
 
     file_tokens = set()
@@ -92,9 +225,6 @@ def _candidate_tests(
         symbol_tokens.update(tokenize_identifier_parts(affected_symbol["symbol"]))
 
     for test_file in tests:
-        if test_file in ranked:
-            continue
-
         test_tokens = tokenize_identifier_parts(test_file)
         reasons: list[str] = []
         score = 0
@@ -120,6 +250,35 @@ def _candidate_tests(
 
     ordered = sorted(ranked.values(), key=lambda item: (-item[0], item[1]["file"]))
     return [payload for _, payload in ordered[:max_results]]
+
+
+def _file_language(filename: str) -> str | None:
+    return _LANGUAGE_BY_SUFFIX.get(Path(filename).suffix.lower())
+
+
+def _feature_tokens(filename: str) -> set[str]:
+    normalized = filename.replace("\\", "/").lower()
+    path = Path(normalized)
+    parts = list(path.parts)
+    start_index = 0
+    for index, part in enumerate(parts[:-1]):
+        if part in _SOURCE_ROOT_MARKERS or part in _TEST_ROOT_MARKERS:
+            start_index = index + 1
+            break
+
+    tokens: set[str] = set()
+    for part in parts[start_index:-1]:
+        tokens.update(tokenize_identifier_parts(part))
+
+    stem = path.stem
+    if stem.startswith("test_"):
+        stem = stem[5:]
+    if stem.endswith("_test"):
+        stem = stem[:-5]
+    if stem.endswith("_spec"):
+        stem = stem[:-5]
+    tokens.update(tokenize_identifier_parts(stem))
+    return {token for token in tokens if token not in _TEST_NAME_TOKENS}
 
 
 def _find_changed_symbol_records(ctx, project_root: str, symbol_name: str):
@@ -514,6 +673,8 @@ async def impact_analysis_impl(
     tracked_files = ctx.structural_store.list_tracked_files(project_root)
     candidate_tests = (
         _candidate_tests(
+            ctx,
+            project_root,
             tracked_files,
             affected_files,
             affected_symbols,

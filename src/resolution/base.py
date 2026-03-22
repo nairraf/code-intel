@@ -2,15 +2,14 @@ from abc import ABC, abstractmethod
 from typing import Optional
 from pathlib import Path
 
+from ..utils import normalize_path
+
 class ImportResolver(ABC):
     """
     Abstract base class for language-specific import resolution strategies.
     Responsible for mapping import strings (e.g. 'from .utils import foo')
     to physical file paths on disk.
     """
-
-    def __init__(self):
-        pass
 
     @abstractmethod
     def resolve(self, source_file: str, import_string: str, project_root: Optional[Path] = None) -> Optional[str]:
@@ -25,16 +24,16 @@ class ImportResolver(ABC):
         Returns:
             Absolute path to the resolved file, or None if resolution fails/is external.
         """
-        pass
 
     @staticmethod
     def _is_within_root(resolved_path: str, project_root: Path) -> bool:
         """Ensures a resolved path stays within the project boundary."""
         try:
-            resolved = Path(resolved_path).resolve()
-            root = project_root.resolve()
-            # This will raise ValueError if resolved is not a subpath of root
-            resolved.relative_to(root)
-            return True
-        except (ValueError, Exception):
+            normalized_resolved = normalize_path(resolved_path)
+            normalized_root = normalize_path(str(project_root))
+            return (
+                normalized_resolved == normalized_root
+                or normalized_resolved.startswith(f"{normalized_root}/")
+            )
+        except (ValueError, OSError, RuntimeError, TypeError):
             return False

@@ -53,7 +53,10 @@ class StructuralRefresher:
         prune_missing_files: bool = True,
     ) -> StructuralRefreshResult:
         normalized_root = normalize_path(project_root)
+        project_root_path = Path(normalized_root)
         normalized_filepaths = [normalize_path(filepath) for filepath in filepaths]
+        symbol_cache: dict[str, list[SymbolRecord]] = {}
+        resolution_cache: dict[tuple[str, str], str | None] = {}
 
         if force_full_scan:
             self.store.clear_project(normalized_root)
@@ -83,9 +86,19 @@ class StructuralRefresher:
             chunks = self.parser.parse_file(filename, project_root=normalized_root)
             parsed_chunks[filename] = chunks
             symbols = _extract_symbol_records(normalized_root, filename, chunks)
-            imports = _extract_import_records(normalized_root, filename, chunks)
+            language_name = chunks[0].language if chunks else self.parser.ext_map.get(Path(filename).suffix.lower(), "")
+            resolver = self.resolvers.get(language_name)
+            imports = _extract_import_records(
+                normalized_root,
+                filename,
+                chunks,
+                resolver=resolver,
+                project_root_path=project_root_path,
+                resolution_cache=resolution_cache,
+            )
             self.store.replace_file_symbols(normalized_root, filename, symbols)
             self.store.replace_file_imports(normalized_root, filename, imports)
+            symbol_cache[normalize_path(filename)] = symbols
 
         files_to_link = list(changed_files)
         files_to_link.extend(filename for filename in impacted_source_files if filename not in files_to_link)
@@ -95,7 +108,14 @@ class StructuralRefresher:
             if chunks is None:
                 chunks = self.parser.parse_file(filename, project_root=normalized_root)
                 parsed_chunks[filename] = chunks
-            edges = self._build_exact_edges(normalized_root, filename, chunks)
+            edges = self._build_exact_edges(
+                normalized_root,
+                filename,
+                chunks,
+                project_root_path=project_root_path,
+                symbol_cache=symbol_cache,
+                resolution_cache=resolution_cache,
+            )
             self.store.replace_file_edges(normalized_root, filename, edges)
             edge_count += len(edges)
 
@@ -132,16 +152,18 @@ class StructuralRefresher:
         project_root: str,
         filename: str,
         chunks: list[CodeChunk],
+        project_root_path: Path,
+        symbol_cache: dict[str, list[SymbolRecord]],
+        resolution_cache: dict[tuple[str, str], str | None],
     ) -> list[EdgeRecord]:
         edge_records: list[EdgeRecord] = []
-        local_symbols = self.store.list_symbols(project_root, filename)
+        local_symbols = self._get_symbols_for_file(project_root, filename, symbol_cache)
         local_by_name: dict[str, list[SymbolRecord]] = {}
         for symbol in local_symbols:
             local_by_name.setdefault(symbol.symbol_name, []).append(symbol)
 
         language_name = chunks[0].language if chunks else self.parser.ext_map.get(Path(filename).suffix.lower(), "")
         resolver = self.resolvers.get(language_name)
-        project_root_path = Path(project_root)
 
         for chunk in chunks:
             if not chunk.usages:
@@ -156,6 +178,8 @@ class StructuralRefresher:
                     local_by_name,
                     resolver,
                     project_root_path,
+                    symbol_cache,
+                    resolution_cache,
                 )
                 for target_symbol, match_type in target_symbols:
                     if target_symbol.symbol_id == chunk.id:
@@ -186,6 +210,21 @@ class StructuralRefresher:
             unique_edges[key] = edge
         return list(unique_edges.values())
 
+    def _get_symbols_for_file(
+        self,
+        project_root: str,
+        filename: str,
+        symbol_cache: dict[str, list[SymbolRecord]],
+    ) -> list[SymbolRecord]:
+        normalized_filename = normalize_path(filename)
+        cached = symbol_cache.get(normalized_filename)
+        if cached is not None:
+            return cached
+
+        records = self.store.list_symbols(project_root, normalized_filename)
+        symbol_cache[normalized_filename] = records
+        return records
+
     def _resolve_usage_targets(
         self,
         project_root: str,
@@ -195,6 +234,8 @@ class StructuralRefresher:
         local_by_name: dict[str, list[SymbolRecord]],
         resolver,
         project_root_path: Path,
+        symbol_cache: dict[str, list[SymbolRecord]],
+        resolution_cache: dict[tuple[str, str], str | None],
     ) -> list[tuple[SymbolRecord, str]]:
         exact_targets: list[tuple[SymbolRecord, str]] = []
 
@@ -209,10 +250,17 @@ class StructuralRefresher:
                     module_name, imported_symbol = dependency.split("::", 1)
                     if imported_symbol != usage.name:
                         continue
-                resolved_path = resolver.resolve(filename, module_name, project_root=project_root_path)
+                cache_key = (filename, module_name)
+                if cache_key not in resolution_cache:
+                    resolution_cache[cache_key] = resolver.resolve(
+                        filename,
+                        module_name,
+                        project_root=project_root_path,
+                    )
+                resolved_path = resolution_cache[cache_key]
                 if not resolved_path:
                     continue
-                for symbol in self.store.list_symbols(project_root, resolved_path):
+                for symbol in self._get_symbols_for_file(project_root, resolved_path, symbol_cache):
                     if imported_symbol is None and symbol.symbol_name != usage.name:
                         continue
                     if symbol.symbol_name == usage.name and symbol.language == chunk.language:
@@ -244,15 +292,41 @@ def _extract_symbol_records(project_root: str, filename: str, chunks: list[CodeC
     return records
 
 
-def _extract_import_records(project_root: str, filename: str, chunks: list[CodeChunk]) -> list[ImportRecord]:
+def _extract_import_records(
+    project_root: str,
+    filename: str,
+    chunks: list[CodeChunk],
+    resolver=None,
+    project_root_path: Path | None = None,
+    resolution_cache: dict[tuple[str, str], str | None] | None = None,
+) -> list[ImportRecord]:
     normalized_filename = normalize_path(filename)
     dependencies = sorted({dependency for chunk in chunks for dependency in chunk.dependencies})
-    return [
-        ImportRecord(
-            project_root=project_root,
-            filename=normalized_filename,
-            import_text=dependency,
-            import_kind="explicit_symbol" if "::" in dependency else "import",
+    records: list[ImportRecord] = []
+    for dependency in dependencies:
+        module_name = dependency.split("::", 1)[0]
+        resolved_path = ""
+        if resolver is not None and project_root_path is not None:
+            cache_key = (normalized_filename, module_name)
+            if resolution_cache is not None and cache_key in resolution_cache:
+                resolved = resolution_cache[cache_key]
+            else:
+                resolved = resolver.resolve(
+                    normalized_filename,
+                    module_name,
+                    project_root=project_root_path,
+                )
+                if resolution_cache is not None:
+                    resolution_cache[cache_key] = resolved
+            resolved_path = normalize_path(resolved) if resolved else ""
+
+        records.append(
+            ImportRecord(
+                project_root=project_root,
+                filename=normalized_filename,
+                import_text=dependency,
+                resolved_path=resolved_path,
+                import_kind="explicit_symbol" if "::" in dependency else "import",
+            )
         )
-        for dependency in dependencies
-    ]
+    return records

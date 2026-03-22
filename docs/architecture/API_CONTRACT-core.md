@@ -8,9 +8,9 @@ The design goal is not to expose internal implementation layers directly. The de
 
 - refresh structural truth cheaply
 - determine whether the current index is trustworthy
-- inspect a symbol or area with confidence signals
-- estimate blast radius for a change
-- request deeper framework-aware enrichment only when needed
+- identify hotspot files and symbols with confidence signals
+- surface import hubs, threshold violations, and likely test gaps cheaply
+- request deeper framework-aware enrichment only when the cheap path is insufficient
 
 This contract intentionally prioritizes:
 
@@ -245,13 +245,129 @@ async def inspect_symbol(
 
 #### Contract
 ```python
-async def get_stats(root_path: str) -> dict
+async def get_stats(
+    root_path: str,
+    view: str = "code",
+    include: str | None = None,
+    exclude: str | None = None,
+    roots: list[str] | None = None,
+) -> dict
 ```
 
 #### Required Behavior
-- Continue to report dependency hubs, high-risk symbols, stale files, and structural rule violations.
+- Default hotspot ranking to code-like source files rather than all tracked files.
+- Support `code`, `tests`, and `all` views so source hotspots, test hotspots, and broader tracked-file views can be inspected separately.
+- Support optional include and exclude globs plus optional root filters matched against project-relative paths.
+- Report large files, large symbols, import fan-in hubs, import fan-out hubs, threshold violations, and direct test-gap candidates.
+- Include a simple refactor-candidate ranking built from cheap structural metrics only.
+- Report large non-code tracked files separately so they remain visible without polluting the default engineering hotspot list.
 - Prefer fast structural data sources over semantic data sources.
 - Include freshness metadata and trust warnings.
+
+#### Response Shape
+```json
+{
+    "status": "ok|missing|error",
+    "summary": "human-readable summary",
+    "freshness": {},
+    "overview": {
+        "trackedFiles": 0,
+        "indexedSymbols": 0,
+        "indexedImports": 0,
+        "indexedEdges": 0,
+        "languages": {
+            "python": 0
+        }
+    },
+    "hotspotScope": {
+        "defaultView": "code",
+        "view": "code",
+        "filesConsidered": 0,
+        "roots": ["src"],
+        "include": "src/**",
+        "exclude": "docs/**",
+        "testFilesExcluded": 0,
+        "nonCodeFilesExcluded": 0
+    },
+    "projectPulse": {
+        "activeBranch": "main",
+        "lastRefreshAt": "ISO-8601 timestamp or null",
+        "lastScanType": "full|incremental|unknown"
+    },
+    "topLargeFiles": [
+        {
+            "file": "path/to/file.py",
+            "loc": 220,
+            "symbolCount": 8,
+            "importCount": 5,
+            "isTest": false
+        }
+    ],
+    "nonCodeLargeFiles": [
+        {
+            "file": "docs/PROJECT_PLAN.md",
+            "loc": 280,
+            "kind": ".md",
+            "reason": "Excluded from default hotspot ranking because it is not a code-like source file."
+        }
+    ],
+    "largestSymbols": [
+        {
+            "symbol": "MyService.run",
+            "file": "path/to/service.py",
+            "kind": "function_definition",
+            "loc": 61
+        }
+    ],
+    "dependencyHubs": {
+        "fanIn": [
+            {
+                "target": "path/to/module.py",
+                "imports": 9,
+                "scope": "internal"
+            }
+        ],
+        "fanOut": [
+            {
+                "file": "path/to/file.py",
+                "imports": 12
+            }
+        ]
+    },
+    "thresholdViolations": [
+        {
+            "rule": "file_loc",
+            "file": "path/to/file.py",
+            "actual": 220,
+            "threshold": 200,
+            "reason": "File exceeds the 200 line guideline."
+        }
+    ],
+    "testGapCandidates": [
+        {
+            "file": "path/to/file.py",
+            "loc": 220,
+            "fanIn": 4,
+            "fanOut": 8,
+            "reason": "Large production file has no direct test match."
+        }
+    ],
+    "refactorCandidates": [
+        {
+            "file": "path/to/file.py",
+            "score": 0.82,
+            "metrics": {
+                "loc": 220,
+                "fanIn": 4,
+                "fanOut": 8,
+                "testGap": 1
+            },
+            "reasons": ["high_loc", "import_hub", "missing_direct_test"]
+        }
+    ],
+    "warnings": ["string"]
+}
+```
 
 ### 5. `impact_analysis`
 **Role**: blast-radius and likely test-impact analysis

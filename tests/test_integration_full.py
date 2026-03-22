@@ -65,9 +65,11 @@ async def test_end_to_end_flow(dummy_project, tmp_path):
 
         # 3. Get Stats
         stats_result = await get_stats.fn(root_path=str(dummy_project))
-        assert "Tracked Files:    3" in stats_result
-        assert "Indexed Symbols:" in stats_result
-        assert "Project Pulse:" in stats_result
+        assert stats_result["status"] == "ok"
+        assert stats_result["overview"]["trackedFiles"] == 3
+        assert stats_result["projectPulse"]["lastScanType"] in {"full", "incremental"}
+        assert stats_result["topLargeFiles"]
+        assert "fanOut" in stats_result["dependencyHubs"]
 
         status_result = await get_index_status.fn(root_path=str(dummy_project))
         assert status_result["status"] == "ok"
