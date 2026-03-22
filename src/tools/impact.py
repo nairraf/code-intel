@@ -23,6 +23,8 @@ _LANGUAGE_BY_SUFFIX = {
 }
 _SOURCE_ROOT_MARKERS = {"lib", "src", "app", "backend", "api"}
 _TEST_ROOT_MARKERS = {"test", "tests"}
+_PYTHON_BRIDGE_PREFIXES = ("get_", "create_", "build_", "make_", "provide_")
+_PYTHON_BRIDGE_SUFFIXES = ("_provider", "_factory")
 
 
 def _normalize_input_files(project_root: str, changed_files: list[str] | None) -> list[str]:
@@ -281,6 +283,23 @@ def _feature_tokens(filename: str) -> set[str]:
     return {token for token in tokens if token not in _TEST_NAME_TOKENS}
 
 
+def _should_bridge_same_file_local_symbol(source_symbol, context: str) -> bool:
+    if source_symbol is None:
+        return False
+    if source_symbol.language != "python":
+        return False
+    if is_test_file(source_symbol.filename):
+        return False
+
+    symbol_kind = source_symbol.symbol_kind or ""
+    normalized_name = source_symbol.symbol_name.lower().lstrip("_")
+    if context == "dependency_injection" and ("function" in symbol_kind or "method" in symbol_kind):
+        return True
+    if "function" in symbol_kind or "method" in symbol_kind:
+        return normalized_name.startswith(_PYTHON_BRIDGE_PREFIXES) or normalized_name.endswith(_PYTHON_BRIDGE_SUFFIXES)
+    return False
+
+
 def _find_changed_symbol_records(ctx, project_root: str, symbol_name: str):
     symbol_records = ctx.structural_store.find_symbols(project_root, symbol_name)
     if symbol_records or "." not in symbol_name:
@@ -499,7 +518,11 @@ async def impact_analysis_impl(
 
         line_number = int(metadata.get("line", 0) or 0)
         match_type = metadata.get("match_type", "exact")
+        confidence = edge_confidence(match_type)
         if match_type == "local_symbol" and edge.source_filename == edge.target_filename:
+            source_symbol = get_cached_symbol(edge.source_symbol_id)
+            if _should_bridge_same_file_local_symbol(source_symbol, metadata.get("context", edge.edge_kind)):
+                record_bridge_symbol(edge.source_symbol_id, target_symbol, line_number, confidence, depth)
             return
 
         evidence_key = (edge.source_filename, line_number, edge.target_symbol_id, match_type)
@@ -507,7 +530,6 @@ async def impact_analysis_impl(
             return
         seen_file_evidence.add(evidence_key)
 
-        confidence = edge_confidence(match_type)
         reason_prefix = "calls changed symbol" if depth == 1 else "calls impacted symbol"
         reason = f"{reason_prefix} {target_symbol.symbol_name}"
         payload = affected_files_map.setdefault(

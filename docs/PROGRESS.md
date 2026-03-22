@@ -106,7 +106,7 @@ The branch will be judged on whether it improves these practical outcomes:
   - [x] add language-aware candidate-test filtering so Dart and Python results stop cross-suggesting tests
   - [x] rank candidate tests by structural evidence before filename heuristics
   - [x] add explicit `get_stats` scope controls for code, tests, and all views
-  - [ ] improve Python downstream impact only for narrow explicit structural patterns
+  - [x] improve Python downstream impact only for narrow explicit structural patterns
   - [x] pin the named Selos utility cases in a tiny regression slice
 
 ### Milestone R5: Scoped Rich Enrichment
@@ -155,7 +155,7 @@ Interpretation:
 ## Immediate Next Steps
 
 - [ ] add `get_stats` view and scope controls so source, tests, and non-code artifacts can be inspected separately
-- [ ] land narrow Python downstream-edge work now that the smaller trust and regression items are pinned
+- [ ] run another Selos external validation pass against the narrowed Python downstream bridge changes
 - [ ] write the security reasoning and trust summary for the narrowed stats-first core
 
 ## Accepted Next Scope

@@ -220,16 +220,26 @@ def fixture_selos_dart_project(tmp_path):
 def fixture_selos_python_project(tmp_path):
     project_root = tmp_path / "selos_python_project"
     app_dir = project_root / "app"
+    services_dir = app_dir / "services"
     middleware_dir = app_dir / "middleware"
     routers_dir = app_dir / "routers"
+    vectorstore_dir = app_dir / "vectorstore"
     tests_dir = project_root / "tests"
     middleware_dir.mkdir(parents=True)
     routers_dir.mkdir()
+    services_dir.mkdir()
+    vectorstore_dir.mkdir()
     tests_dir.mkdir()
 
     (app_dir / "__init__.py").write_text("", encoding="utf-8")
     (middleware_dir / "__init__.py").write_text("", encoding="utf-8")
     (routers_dir / "__init__.py").write_text("", encoding="utf-8")
+    (services_dir / "__init__.py").write_text(
+        "def create_analysis_queue_provider():\n"
+        "    return object()\n",
+        encoding="utf-8",
+    )
+    (vectorstore_dir / "__init__.py").write_text("", encoding="utf-8")
 
     (middleware_dir / "firebase_auth.py").write_text(
         "def verify_firebase_token():\n"
@@ -245,6 +255,44 @@ def fixture_selos_python_project(tmp_path):
         encoding="utf-8",
     )
 
+    (vectorstore_dir / "base.py").write_text(
+        "class VectorStore:\n"
+        "    async def search(self, embedding, top_k=5, filters=None):\n"
+        "        return []\n\n"
+        "class AzureSearchVectorStore(VectorStore):\n"
+        "    def validate_connection(self):\n"
+        "        return True\n\n"
+        "def get_vector_store(index_name=None):\n"
+        "    return AzureSearchVectorStore()\n",
+        encoding="utf-8",
+    )
+
+    (services_dir / "nlp_service.py").write_text(
+        "from app.vectorstore.base import get_vector_store\n\n"
+        "class NLPService:\n"
+        "    def __init__(self):\n"
+        "        self.vector_store = None\n\n"
+        "    def _get_vector_store(self):\n"
+        "        if self.vector_store is None:\n"
+        "            self.vector_store = get_vector_store()\n"
+        "        return self.vector_store\n\n"
+        "    async def match_verses(self, embedding):\n"
+        "        vector_store = self._get_vector_store()\n"
+        "        return await vector_store.search(embedding, top_k=2)\n",
+        encoding="utf-8",
+    )
+
+    (app_dir / "runtime.py").write_text(
+        "from app.services import create_analysis_queue_provider\n"
+        "from app.vectorstore.base import get_vector_store\n\n"
+        "def initialize_runtime():\n"
+        "    queue_provider = create_analysis_queue_provider()\n"
+        "    vector_store = get_vector_store()\n"
+        "    vector_store.validate_connection()\n"
+        "    return queue_provider\n",
+        encoding="utf-8",
+    )
+
     (tests_dir / "test_main.py").write_text(
         "from app.middleware.firebase_auth import verify_firebase_token\n"
         "from app.routers.analysis import analyze\n\n"
@@ -257,6 +305,22 @@ def fixture_selos_python_project(tmp_path):
     (tests_dir / "test_smoke.py").write_text(
         "def test_smoke():\n"
         "    assert True\n",
+        encoding="utf-8",
+    )
+
+    (tests_dir / "test_vectorstore.py").write_text(
+        "from app.vectorstore.base import AzureSearchVectorStore\n"
+        "from app.services.nlp_service import NLPService\n\n"
+        "def test_vectorstore_smoke():\n"
+        "    assert AzureSearchVectorStore() is not None\n"
+        "    assert NLPService() is not None\n",
+        encoding="utf-8",
+    )
+
+    (tests_dir / "test_startup.py").write_text(
+        "from app.runtime import initialize_runtime\n\n"
+        "def test_initialize_runtime_smoke():\n"
+        "    assert initialize_runtime is not None\n",
         encoding="utf-8",
     )
 
@@ -356,3 +420,23 @@ async def test_selos_verify_firebase_token_prefers_explicit_python_test(selos_py
         for reason in result["candidateTests"][0]["reasons"]
     )
     assert all(test["file"].endswith(".py") for test in result["candidateTests"])
+
+
+@pytest.mark.asyncio
+async def test_selos_azure_search_vector_store_reaches_runtime_consumers(selos_python_project, tmp_path):
+    structural_store, structural_refresher = _structural_runtime(tmp_path, "selos_vectorstore")
+
+    with patch("src.context._context.structural_store", structural_store), \
+         patch("src.context._context.structural_refresher", structural_refresher):
+        await refresh_index.fn(root_path=str(selos_python_project), force_full_scan=True)
+        result = await impact_analysis.fn(
+            root_path=str(selos_python_project),
+            changed_symbols=["AzureSearchVectorStore"],
+            include_tests=True,
+        )
+
+    assert result["status"] == "ok"
+    affected_files = {Path(item["file"]).name for item in result["affectedFiles"]}
+    assert {"nlp_service.py", "runtime.py"}.issubset(affected_files)
+    assert any(item["symbol"] == "AzureSearchVectorStore" for item in result["affectedSymbols"])
+    assert any(test["file"].endswith("test_vectorstore.py") for test in result["candidateTests"])
