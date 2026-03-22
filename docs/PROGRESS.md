@@ -107,7 +107,7 @@ The branch will be judged on whether it improves these practical outcomes:
   - [x] rank candidate tests by structural evidence before filename heuristics
   - [x] add explicit `get_stats` scope controls for code, tests, and all views
   - [ ] improve Python downstream impact only for narrow explicit structural patterns
-  - [ ] pin the named Selos utility cases in a tiny regression slice
+  - [x] pin the named Selos utility cases in a tiny regression slice
 
 ### Milestone R5: Scoped Rich Enrichment
 - **Status:** Not started
@@ -155,8 +155,7 @@ Interpretation:
 ## Immediate Next Steps
 
 - [ ] add `get_stats` view and scope controls so source, tests, and non-code artifacts can be inspected separately
-- [ ] add the tiny Selos regression slice before attempting narrow Python downstream-edge improvements
-- [ ] land narrow Python downstream-edge work only after the smaller trust and regression items are pinned
+- [ ] land narrow Python downstream-edge work now that the smaller trust and regression items are pinned
 - [ ] write the security reasoning and trust summary for the narrowed stats-first core
 
 ## Accepted Next Scope

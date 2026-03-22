@@ -158,7 +158,7 @@ The preferred architecture and technology direction are documented in `docs/arch
 	- [x] structural-first candidate-test ranking lands ahead of filename heuristics
 	- [x] `get_stats` adds `code`, `tests`, and `all` scope controls plus optional include or exclude filtering
 	- [ ] narrow Python downstream-edge improvements land for explicit imports, simple providers, and direct `Depends(...)` forms only
-	- [ ] tiny Selos regression slice protects the named high-value symbols and hotspot cases
+	- [x] tiny Selos regression slice protects the named high-value symbols and hotspot cases
 	- [ ] broader real-agent workflow validation focused on hotspot usefulness rather than deep inference
 
 ### Milestone R5: Deferred Structural Analysis

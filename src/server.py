@@ -158,6 +158,20 @@ async def inspect_symbol(
     include_dependents: bool = False,
     max_references: int = 50,
 ) -> dict:
+    """
+    Inspects one symbol using exact structural definitions, references, and optional dependents.
+
+    Best for: Jumping to the right definition quickly, checking where a symbol is used, and validating whether a rename or refactor looks locally safe.
+
+    Args:
+        root_path: MUST be the absolute path to the active workspace project root. NEVER use '.' or relative paths.
+        symbol_name: Exact symbol name to inspect.
+        filename: Optional file path to disambiguate symbols with the same name.
+        line: Optional 1-based line number to disambiguate symbols with the same name.
+        include_references: When true, include structural references to the symbol.
+        include_dependents: When true, include downstream dependent files and symbols when available.
+        max_references: Maximum number of references to return.
+    """
     norm_root = normalize_path(root_path)
     norm_file = normalize_path(filename) if filename else None
     return await inspect_symbol_impl(
@@ -181,6 +195,19 @@ async def impact_analysis(
     include_tests: bool = True,
     max_results: int = 50,
 ) -> dict:
+    """
+    Estimates structural blast radius from changed files, changed symbols, or patch text.
+
+    Best for: Deciding what code to inspect next, which nearby tests are worth running, and whether a change is likely to stay local or fan out.
+
+    Args:
+        root_path: MUST be the absolute path to the active workspace project root. NEVER use '.' or relative paths.
+        changed_files: Optional list of changed file paths.
+        changed_symbols: Optional list of changed symbol names.
+        patch_text: Optional unified diff text parsed heuristically into changed files and symbols.
+        include_tests: When true, include candidate tests in the output.
+        max_results: Maximum number of affected files, symbols, and tests to return per section.
+    """
     norm_root = normalize_path(root_path)
     return await impact_analysis_impl(
         norm_root,
